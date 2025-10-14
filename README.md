@@ -48,11 +48,55 @@ This demo showcases:
 
 ## 🚀 Quick Start
 
-### 1. Setup the Cluster
+### Option A: Local Kind Cluster (Development)
+
+**Note**: Block volumes have [known limitations](#known-limitations) in containerized environments.
+
+#### 1. Setup the Cluster
 
 ```bash
 # Create Kind cluster with CSI support
 ./scripts/00-setup-cluster.sh
+```
+
+### Option B: Remote Cluster (Recommended for Block Volumes)
+
+Use this approach to run the demo on a real Kubernetes cluster with proper block device support.
+
+#### 1. Setup Your Cluster Connection
+
+```bash
+# Set your kubeconfig
+export KUBECONFIG=/path/to/your/kubeconfig
+
+# Verify connectivity
+kubectl cluster-info
+```
+
+#### 2. Run Automated Setup
+
+```bash
+# Run the complete demo setup on remote cluster
+./scripts/run-demo-remote.sh
+```
+
+This will:
+- Verify cluster connectivity
+- Deploy MinIO for S3 storage
+- Install VolumeSnapshot CRDs (if needed)
+- Optionally install CSI driver
+- Deploy PostgreSQL workload
+- Validate the setup
+
+#### Manual Remote Cluster Setup
+
+If you prefer step-by-step control:
+
+```bash
+# 1. Verify cluster
+./scripts/00-setup-remote-cluster.sh
+
+# 2. Continue with standard deployment steps below
 ```
 
 ### 2. Deploy MinIO (S3 Storage)
@@ -292,9 +336,10 @@ failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 **Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`. In containerized environments (Docker, Codespaces), the container has a static copy of the host's `/dev` directory, so loop devices created after container startup are not visible, causing `losetup -f` to fail.
 
 **Workaround**:
-1. Run on bare metal Kubernetes or VM-based clusters (e.g., real Kind on Linux VM, GKE, EKS)
-2. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
-3. Pre-create loop devices on the host before starting the container (requires host access)
+1. **Use a remote cluster** (GKE, EKS, AKS, or bare metal) - see [Quick Start Option B](#option-b-remote-cluster-recommended-for-block-volumes)
+2. Run on VM-based local clusters (e.g., Kind on a Linux VM with host access)
+3. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
+4. Pre-create loop devices on the host before starting the container (requires host access)
 
 **Status**: This is a fundamental limitation of running block device workloads in nested containerized environments. While specific test infrastructure issues have been resolved, the underlying constraint remains for development environments like Codespaces.
 
@@ -357,8 +402,10 @@ kubectl run -it --rm debug --image=minio/mc --restart=Never -- \
 
 ## 🧹 Cleanup
 
+### Local Kind Cluster
+
 ```bash
-# Delete everything
+# Delete everything (Kind cluster and temp directories)
 ./scripts/cleanup.sh
 ```
 
@@ -366,6 +413,18 @@ This removes:
 - Kind cluster
 - Temporary directories
 - Downloaded CSI driver repository
+
+### Remote Cluster
+
+```bash
+# Clean up demo resources from remote cluster
+./scripts/cleanup-remote-cluster.sh
+```
+
+This removes:
+- `cbt-demo` namespace and all resources
+- VolumeSnapshots and VolumeSnapshotContents
+- Does NOT remove: CSI driver, CRDs, or storage classes (manual cleanup if needed)
 
 ## 📚 References
 
