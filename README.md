@@ -296,8 +296,8 @@ failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 2. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
 
 **Related Issues**:
-- [kubernetes-csi/csi-driver-host-path#334](https://github.com/kubernetes-csi/csi-driver-host-path/issues/334) - Block volumes in containers
-- [kubernetes-sigs/kind#1934](https://github.com/kubernetes-sigs/kind/issues/1934) - Loop device support
+- [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable
+- [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments
 
 ### SnapshotMetadataService CRD Availability
 
