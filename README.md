@@ -289,15 +289,18 @@ type BlockMetadata struct {
 failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 ```
 
-**Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`, which is restricted in containerized environments for security reasons.
+**Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`. In containerized environments (Docker, Codespaces), the container has a static copy of the host's `/dev` directory, so loop devices created after container startup are not visible, causing `losetup -f` to fail.
 
 **Workaround**:
 1. Run on bare metal Kubernetes or VM-based clusters (e.g., real Kind on Linux VM, GKE, EKS)
 2. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
+3. Pre-create loop devices on the host before starting the container (requires host access)
 
-**Related Issues**:
-- [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable
-- [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments
+**Status**: This is a fundamental limitation of running block device workloads in nested containerized environments. While specific test infrastructure issues have been resolved, the underlying constraint remains for development environments like Codespaces.
+
+**Related Issues** (Historical):
+- [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable (closed - resolved for test infrastructure)
+- [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments (closed)
 
 ### SnapshotMetadataService CRD Availability
 
