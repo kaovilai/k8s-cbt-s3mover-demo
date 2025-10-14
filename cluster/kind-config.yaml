@@ -6,6 +6,11 @@ nodes:
     # Enable feature gates for CBT support
     kubeadmConfigPatches:
       - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+      - |
         kind: ClusterConfiguration
         apiServer:
           extraArgs:
@@ -14,12 +19,6 @@ nodes:
           extraArgs:
             feature-gates: "CSIVolumeSnapshotDataSource=true,VolumeSnapshotDataSource=true"
     # Mount hostPath for CSI driver storage
-    extraMounts:
-      - hostPath: /tmp/cbt-demo-csi
-        containerPath: /var/lib/csi-hostpath-data
-      - hostPath: /tmp/cbt-demo-minio
-        containerPath: /mnt/minio-data
-  - role: worker
     extraMounts:
       - hostPath: /tmp/cbt-demo-csi
         containerPath: /var/lib/csi-hostpath-data

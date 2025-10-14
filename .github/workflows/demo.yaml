@@ -30,7 +30,10 @@ jobs:
       - name: Setup cluster
         run: |
           echo "Creating Kind cluster with CBT support..."
-          ./scripts/00-setup-cluster.sh
+          # Use minimal config for CI environment
+          kind create cluster --config cluster/kind-config-minimal.yaml --wait 10m
+          kubectl cluster-info
+          kubectl get nodes
 
       - name: Verify cluster
         run: |
@@ -58,6 +61,16 @@ jobs:
 
           echo "Verifying MinIO service..."
           kubectl get svc -n cbt-demo minio
+
+      - name: Install Snapshot CRDs
+        run: |
+          echo "Installing VolumeSnapshot CRDs..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
       - name: Deploy CSI Driver with CBT
         run: |
