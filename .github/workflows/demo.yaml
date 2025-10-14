@@ -1,9 +1,16 @@
 name: K8s CBT S3Mover Demo
 
-# Note: This workflow has known limitations in CI environments:
-# - Block device provisioning is skipped (requires privileged containers)
-# - Full CBT metadata API is not available (pending CRD release)
-# - Basic snapshot functionality and integration tests work correctly
+# This workflow supports two modes:
+# 1. Local Kind cluster (default) - Limited by container restrictions
+#    - Block device provisioning is skipped (requires privileged containers)
+#    - Full CBT metadata API is not available (pending CRD release)
+#    - Basic snapshot functionality and integration tests work correctly
+#
+# 2. Remote cluster (optional) - Use real Kubernetes cluster with block device support
+#    - Set GitHub secret 'KUBECONFIG' with base64-encoded kubeconfig
+#    - Enables full block device testing and CBT functionality
+#    - Example: cat ~/.kube/config | base64 | pbcopy
+#
 # See README.md "Known Limitations" section for details
 
 on:
@@ -27,13 +34,25 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Setup kubectl with remote cluster
+        if: ${{ secrets.KUBECONFIG != '' }}
+        run: |
+          echo "Using remote cluster from GitHub secrets..."
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl cluster-info
+          kubectl get nodes
+
       - name: Install Kind
+        if: ${{ secrets.KUBECONFIG == '' }}
         uses: helm/kind-action@v1
         with:
           install_only: true
           version: v0.20.0
 
-      - name: Setup cluster
+      - name: Setup local Kind cluster
+        if: ${{ secrets.KUBECONFIG == '' }}
         run: |
           echo "Creating Kind cluster with CBT support..."
           # Use minimal config for CI environment
@@ -198,11 +217,18 @@ jobs:
           echo "PostgreSQL Logs:"
           kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
 
-      - name: Cleanup
-        if: always()
+      - name: Cleanup local Kind cluster
+        if: always() && secrets.KUBECONFIG == ''
         run: |
-          echo "Cleaning up..."
+          echo "Cleaning up local Kind cluster..."
           ./scripts/cleanup.sh || true
+
+      - name: Cleanup remote cluster resources
+        if: always() && secrets.KUBECONFIG != ''
+        run: |
+          echo "Cleaning up resources from remote cluster..."
+          kubectl delete namespace cbt-demo --ignore-not-found=true || true
+          echo "Remote cluster preserved, only namespace removed"
 
   build-backup-tool:
     runs-on: ubuntu-latest

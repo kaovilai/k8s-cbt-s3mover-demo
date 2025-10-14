@@ -363,9 +363,31 @@ error: no matches for kind "SnapshotMetadataService" in version "cbt.storage.k8s
 ### GitHub Actions CI
 
 **Status**: CI workflow runs successfully with the following caveats:
-- Block device tests are skipped due to container limitations
+- Block device tests are skipped due to container limitations (Kind cluster mode)
 - Full CBT metadata API tests are skipped pending CRD availability
 - Basic snapshot and MinIO integration tests pass
+
+**Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
+
+1. **Encode your kubeconfig**:
+   ```bash
+   # MacOS/Linux
+   cat ~/.kube/config | base64 | pbcopy
+
+   # Or save to file
+   cat ~/.kube/config | base64 > kubeconfig-b64.txt
+   ```
+
+2. **Add GitHub Secret**:
+   - Go to your repository Settings → Secrets and variables → Actions
+   - Create a new secret named `KUBECONFIG`
+   - Paste the base64-encoded kubeconfig content
+
+3. **Benefits of Remote Cluster**:
+   - ✅ Full block device support (no losetup limitations)
+   - ✅ Real CSI driver testing with block volumes
+   - ✅ Tests run on actual infrastructure (GKE, EKS, AKS, etc.)
+   - ⚠️ Ensure the cluster has sufficient resources and CSI support
 
 See [.github/workflows/demo.yaml](.github/workflows/demo.yaml) for the current CI configuration.
 
