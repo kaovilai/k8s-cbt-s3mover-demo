@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: cbt-demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # IMPORTANT: Block mode is required for CBT
+  volumeMode: Block
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      # Start with 2Gi for demo
+      storage: 2Gi

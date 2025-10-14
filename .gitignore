@@ -1,0 +1,56 @@
+# Binaries
+tools/cbt-backup/cbt-backup
+tools/cbt-restore/cbt-restore
+tools/data-generator/data-generator
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go
+go.work
+go.work.sum
+vendor/
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# Test coverage
+*.cover
+coverage.html
+coverage.txt
+
+# Local development
+.env
+.env.local
+*.local
+
+# Terraform/IaC (if added later)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Downloaded CSI driver
+/tmp/csi-driver-host-path/

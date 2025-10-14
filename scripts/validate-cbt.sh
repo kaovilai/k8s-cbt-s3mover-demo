@@ -1,0 +1,130 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "=========================================="
+echo "Validating Changed Block Tracking (CBT)"
+echo "=========================================="
+
+EXIT_CODE=0
+
+# Check if SnapshotMetadataService CRD exists
+echo "Checking SnapshotMetadataService CRD..."
+if kubectl get crd snapshotmetadataservices.snapshotmetadata.storage.k8s.io &> /dev/null; then
+    echo "✓ SnapshotMetadataService CRD is installed"
+else
+    echo "✗ SnapshotMetadataService CRD not found"
+    EXIT_CODE=1
+fi
+
+# Check if SnapshotMetadataService instances exist
+echo ""
+echo "Checking SnapshotMetadataService instances..."
+if kubectl get snapshotmetadataservices -A &> /dev/null; then
+    SERVICES=$(kubectl get snapshotmetadataservices -A --no-headers | wc -l)
+    if [ "$SERVICES" -gt 0 ]; then
+        echo "✓ Found $SERVICES SnapshotMetadataService instance(s)"
+        kubectl get snapshotmetadataservices -A
+    else
+        echo "⚠ No SnapshotMetadataService instances found"
+        echo "  This is normal if the CSI driver hasn't created one yet"
+    fi
+else
+    echo "✗ Cannot query SnapshotMetadataService resources"
+    EXIT_CODE=1
+fi
+
+# Check CSI driver pods
+echo ""
+echo "Checking CSI driver pods..."
+if kubectl get pods -n kube-system -l app=csi-hostpathplugin &> /dev/null; then
+    PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+    if [ "$PODS" -gt 0 ]; then
+        echo "✓ CSI hostpath driver pods are running ($PODS)"
+        kubectl get pods -n kube-system -l app=csi-hostpathplugin
+    else
+        echo "⚠ CSI hostpath driver pods found but not all running"
+        kubectl get pods -n kube-system -l app=csi-hostpathplugin
+
+        # Give pods more time to start
+        echo "Waiting up to 30s for pods to become ready..."
+        RETRIES=0
+        MAX_RETRIES=15
+        while [ $RETRIES -lt $MAX_RETRIES ]; do
+            RUNNING_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+            if [ "$RUNNING_PODS" -gt 0 ]; then
+                echo "✓ CSI driver pods are now running ($RUNNING_PODS)"
+                kubectl get pods -n kube-system -l app=csi-hostpathplugin
+                break
+            fi
+            sleep 2
+            RETRIES=$((RETRIES + 1))
+        done
+
+        # Check again after waiting
+        FINAL_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+        if [ "$FINAL_PODS" -eq 0 ]; then
+            echo "✗ CSI hostpath driver pods are still not running"
+            EXIT_CODE=1
+        fi
+    fi
+else
+    echo "✗ CSI hostpath driver not found"
+    EXIT_CODE=1
+fi
+
+# Check for snapshot metadata sidecar
+echo ""
+echo "Checking for snapshot metadata sidecar..."
+if kubectl get pods -n kube-system -l app=csi-hostpathplugin -o yaml | grep -q "snapshot-metadata"; then
+    echo "✓ Snapshot metadata sidecar is present"
+else
+    echo "✗ Snapshot metadata sidecar not found"
+    echo "  Ensure the driver was deployed with SNAPSHOT_METADATA_TESTS=true"
+    EXIT_CODE=1
+fi
+
+# Check VolumeSnapshotClass
+echo ""
+echo "Checking VolumeSnapshotClass..."
+if kubectl get volumesnapshotclass csi-hostpath-snapclass &> /dev/null; then
+    echo "✓ VolumeSnapshotClass 'csi-hostpath-snapclass' exists"
+    kubectl get volumesnapshotclass csi-hostpath-snapclass
+else
+    echo "✗ VolumeSnapshotClass 'csi-hostpath-snapclass' not found"
+    EXIT_CODE=1
+fi
+
+# Check StorageClass
+echo ""
+echo "Checking StorageClass..."
+if kubectl get storageclass csi-hostpath-sc &> /dev/null; then
+    echo "✓ StorageClass 'csi-hostpath-sc' exists"
+    kubectl get storageclass csi-hostpath-sc
+else
+    echo "✗ StorageClass 'csi-hostpath-sc' not found"
+    EXIT_CODE=1
+fi
+
+# Check for snapshots (if any exist)
+echo ""
+echo "Checking for existing VolumeSnapshots..."
+SNAPSHOTS=$(kubectl get volumesnapshot -A --no-headers 2>/dev/null | wc -l)
+if [ "$SNAPSHOTS" -gt 0 ]; then
+    echo "✓ Found $SNAPSHOTS VolumeSnapshot(s)"
+    kubectl get volumesnapshot -A
+else
+    echo "ℹ No VolumeSnapshots found yet (this is normal before first backup)"
+fi
+
+echo ""
+echo "=========================================="
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "✓ CBT validation PASSED"
+    echo "Changed Block Tracking is properly configured!"
+else
+    echo "✗ CBT validation FAILED"
+    echo "Please check the errors above"
+fi
+echo "=========================================="
+
+exit $EXIT_CODE

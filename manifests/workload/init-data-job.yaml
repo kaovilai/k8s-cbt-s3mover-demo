@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-init-data
+  namespace: cbt-demo
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: postgres-init-data
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: init-data
+        image: postgres:16-alpine
+        env:
+        - name: PGHOST
+          value: postgres
+        - name: PGDATABASE
+          value: cbtdemo
+        - name: PGUSER
+          value: demo
+        - name: PGPASSWORD
+          value: demopassword
+        command: ['/bin/sh', '-c']
+        args:
+          - |
+            echo "Waiting for PostgreSQL to be ready..."
+            until pg_isready; do
+              echo "Waiting..."
+              sleep 2
+            done
+
+            echo "Creating initial schema..."
+            psql <<EOF
+            CREATE TABLE IF NOT EXISTS demo_data (
+              id SERIAL PRIMARY KEY,
+              data_block INT NOT NULL,
+              content TEXT NOT NULL,
+              checksum VARCHAR(64) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX idx_data_block ON demo_data(data_block);
+            EOF
+
+            echo "Populating initial data (~100MB)..."
+            # Generate data in blocks for easier tracking of changes
+            for block in {1..1000}; do
+              DATA=$(head -c 100000 /dev/urandom | base64 | head -c 100000)
+              CHECKSUM=$(echo -n "$DATA" | sha256sum | awk '{print $1}')
+              psql -c "INSERT INTO demo_data (data_block, content, checksum) VALUES ($block, '$DATA', '$CHECKSUM');"
+
+              if [ $((block % 100)) -eq 0 ]; then
+                echo "Inserted $block blocks..."
+              fi
+            done
+
+            echo "Initial data population complete!"
+            psql -c "SELECT COUNT(*), pg_size_pretty(pg_total_relation_size('demo_data')) FROM demo_data;"

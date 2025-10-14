@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: cbt-demo
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+
+    # Format and mount the block device if not already formatted
+    DEVICE="/dev/xvda"
+    MOUNT_POINT="/var/lib/postgresql/data"
+
+    if ! mountpoint -q "$MOUNT_POINT"; then
+      echo "Formatting block device..."
+      mkfs.ext4 -F "$DEVICE"
+      echo "Mounting block device..."
+      mount "$DEVICE" "$MOUNT_POINT"
+      chown -R postgres:postgres "$MOUNT_POINT"
+    fi
+
+    exec docker-entrypoint.sh postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: cbt-demo
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      # Need privileged for block device formatting
+      securityContext:
+        fsGroup: 999
+      initContainers:
+      - name: format-block-device
+        image: busybox:1.36
+        command: ['sh', '-c']
+        args:
+          - |
+            if ! blkid /dev/xvda; then
+              echo "Formatting block device..."
+              mkfs.ext4 -F /dev/xvda
+            fi
+            mkdir -p /mnt/data
+            mount /dev/xvda /mnt/data
+            chmod 777 /mnt/data
+            umount /mnt/data
+        securityContext:
+          privileged: true
+        volumeDevices:
+        - name: postgres-data
+          devicePath: /dev/xvda
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        env:
+        - name: POSTGRES_DB
+          value: cbtdemo
+        - name: POSTGRES_USER
+          value: demo
+        - name: POSTGRES_PASSWORD
+          value: demopassword
+        - name: PGDATA
+          value: /mnt/pgdata
+        ports:
+        - containerPort: 5432
+          name: postgres
+        command: ['sh', '-c']
+        args:
+          - |
+            mkdir -p /mnt/data
+            mount /dev/xvda /mnt/data
+            mkdir -p /mnt/pgdata
+            chown -R postgres:postgres /mnt/pgdata
+            exec docker-entrypoint.sh postgres
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeDevices:
+        - name: postgres-data
+          devicePath: /dev/xvda
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U demo
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U demo
+          initialDelaySeconds: 10
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      volumeMode: Block
+      storageClassName: csi-hostpath-sc
+      resources:
+        requests:
+          storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: cbt-demo
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: postgres
