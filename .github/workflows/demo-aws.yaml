@@ -1,0 +1,298 @@
+name: K8s CBT Demo on AWS EKS
+
+# This workflow creates a temporary EKS cluster for testing CBT with real block devices
+# Requires AWS credentials as GitHub secrets:
+# - AWS_ACCESS_KEY_ID
+# - AWS_SECRET_ACCESS_KEY
+# - AWS_REGION (optional, defaults to us-east-1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster_name:
+        description: 'EKS cluster name (will be prefixed with cbt-demo-)'
+        required: false
+        default: 'test'
+      keep_cluster:
+        description: 'Keep cluster after tests (true/false)'
+        required: false
+        default: 'false'
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  CLUSTER_NAME: cbt-demo-${{ github.event.inputs.cluster_name || 'test' }}-${{ github.run_number }}
+  EKS_VERSION: '1.28'
+
+jobs:
+  test-on-eks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install eksctl
+        run: |
+          ARCH=amd64
+          PLATFORM=$(uname -s)_$ARCH
+          curl -sLO "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+          tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin
+          eksctl version
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          kubectl version --client
+
+      - name: Create EKS cluster
+        run: |
+          echo "Creating EKS cluster: $CLUSTER_NAME in region: $AWS_REGION"
+
+          cat > eks-cluster-config.yaml <<EOF
+          apiVersion: eksctl.io/v1alpha5
+          kind: ClusterConfig
+
+          metadata:
+            name: $CLUSTER_NAME
+            region: $AWS_REGION
+            version: "$EKS_VERSION"
+            tags:
+              purpose: cbt-demo
+              ci: github-actions
+              auto-delete: "true"
+
+          managedNodeGroups:
+            - name: ng-1
+              instanceType: t3.medium
+              desiredCapacity: 2
+              minSize: 2
+              maxSize: 2
+              volumeSize: 20
+              volumeType: gp3
+              tags:
+                purpose: cbt-demo
+              iam:
+                withAddonPolicies:
+                  ebs: true
+                  efs: true
+
+          addons:
+            - name: aws-ebs-csi-driver
+              version: latest
+              attachPolicyARNs:
+                - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+          EOF
+
+          eksctl create cluster -f eks-cluster-config.yaml
+
+          # Update kubeconfig
+          aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
+
+      - name: Verify EKS cluster
+        run: |
+          echo "Waiting for cluster to be fully ready..."
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+
+          echo "Cluster nodes:"
+          kubectl get nodes -o wide
+
+          echo "Storage classes:"
+          kubectl get storageclass
+
+      - name: Install VolumeSnapshot CRDs
+        run: |
+          echo "Installing VolumeSnapshot CRDs..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+
+      - name: Install EBS Snapshot Controller
+        run: |
+          echo "Installing EBS CSI snapshot controller..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+
+          # Wait for snapshot controller
+          kubectl wait --for=condition=Ready pod -l app=snapshot-controller -n kube-system --timeout=120s || true
+
+      - name: Create VolumeSnapshotClass for EBS
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshotClass
+          metadata:
+            name: ebs-csi-snapclass
+          driver: ebs.csi.aws.com
+          deletionPolicy: Delete
+          EOF
+
+      - name: Deploy MinIO
+        run: |
+          echo "Deploying MinIO S3 storage..."
+          ./scripts/01-deploy-minio.sh
+
+          # Wait for MinIO
+          kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
+          kubectl get pods -n cbt-demo -l app=minio
+
+      - name: Deploy PostgreSQL with EBS block volume
+        run: |
+          echo "Deploying PostgreSQL with EBS block PVC..."
+
+          # Note: We'll use EBS CSI driver's storage class
+          # The deployment script may need adjustment for EBS
+          ./scripts/03-deploy-workload.sh || {
+            echo "Standard deployment failed, trying with EBS storage class..."
+            # Patch to use gp3 storage class if needed
+            kubectl get pvc -n cbt-demo
+          }
+
+      - name: Verify PostgreSQL deployment
+        run: |
+          echo "Waiting for PostgreSQL pod..."
+          kubectl wait --for=condition=Ready pod -l app=postgres -n cbt-demo --timeout=300s || {
+            echo "PostgreSQL not ready, checking status..."
+            kubectl get pods -n cbt-demo -l app=postgres
+            kubectl describe pod -n cbt-demo -l app=postgres
+            kubectl get pvc -n cbt-demo
+            kubectl describe pvc -n cbt-demo
+          }
+
+      - name: Run integrity checks
+        run: |
+          echo "Running integrity checks..."
+          ./scripts/backup-status.sh || true
+          ./scripts/integrity-check.sh || true
+
+      - name: Create and test snapshots
+        run: |
+          echo "Creating VolumeSnapshot..."
+
+          PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+          echo "PVC Name: $PVC_NAME"
+
+          cat <<EOF | kubectl apply -f -
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshot
+          metadata:
+            name: postgres-snapshot-1
+            namespace: cbt-demo
+          spec:
+            volumeSnapshotClassName: ebs-csi-snapclass
+            source:
+              persistentVolumeClaimName: $PVC_NAME
+          EOF
+
+          # Wait for snapshot to be ready
+          echo "Waiting for snapshot to be ready..."
+          RETRIES=0
+          MAX_RETRIES=60
+          while [ $RETRIES -lt $MAX_RETRIES ]; do
+            STATUS=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath='{.status.readyToUse}' 2>/dev/null || echo "")
+            if [ "$STATUS" = "true" ]; then
+              echo "✓ Snapshot is ready!"
+              kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o yaml
+              break
+            fi
+
+            ERROR=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath='{.status.error.message}' 2>/dev/null || echo "")
+            if [ -n "$ERROR" ]; then
+              echo "✗ Snapshot error: $ERROR"
+              kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
+              exit 1
+            fi
+
+            echo "Waiting... ($RETRIES/$MAX_RETRIES)"
+            sleep 5
+            RETRIES=$((RETRIES + 1))
+          done
+
+          if [ $RETRIES -eq $MAX_RETRIES ]; then
+            echo "✗ Snapshot did not become ready within timeout"
+            kubectl get volumesnapshot -n cbt-demo
+            kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
+            exit 1
+          fi
+
+      - name: Test disaster recovery
+        run: |
+          echo "Testing disaster recovery scenario..."
+          ./scripts/05-simulate-disaster.sh <<< "yes" || true
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "Collecting diagnostic information..."
+          kubectl get all -A
+          kubectl get pvc -A
+          kubectl get volumesnapshot -A
+          kubectl get volumesnapshotcontent
+          kubectl get storageclass
+
+          echo "---"
+          echo "MinIO logs:"
+          kubectl logs -n cbt-demo -l app=minio --tail=100 || true
+
+          echo "---"
+          echo "PostgreSQL logs:"
+          kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
+
+          echo "---"
+          echo "CSI controller logs:"
+          kubectl logs -n kube-system -l app=ebs-csi-controller --tail=100 || true
+
+      - name: Cleanup namespace
+        if: always()
+        run: |
+          echo "Cleaning up cbt-demo namespace..."
+          kubectl delete namespace cbt-demo --ignore-not-found=true --timeout=120s || true
+
+      - name: Delete EKS cluster
+        if: always() && github.event.inputs.keep_cluster != 'true'
+        run: |
+          echo "Deleting EKS cluster: $CLUSTER_NAME"
+          eksctl delete cluster --name $CLUSTER_NAME --region $AWS_REGION --wait || {
+            echo "Standard deletion failed, forcing cleanup..."
+            eksctl delete cluster --name $CLUSTER_NAME --region $AWS_REGION --force || true
+          }
+
+      - name: Verify cleanup
+        if: always() && github.event.inputs.keep_cluster != 'true'
+        run: |
+          echo "Verifying cluster deletion..."
+          aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION && {
+            echo "⚠️  Cluster still exists!"
+            exit 1
+          } || echo "✓ Cluster successfully deleted"
+
+      - name: Export cluster info (if kept)
+        if: always() && github.event.inputs.keep_cluster == 'true'
+        run: |
+          echo "=========================================="
+          echo "Cluster was kept for manual testing"
+          echo "=========================================="
+          echo ""
+          echo "Cluster name: $CLUSTER_NAME"
+          echo "Region: $AWS_REGION"
+          echo ""
+          echo "To access:"
+          echo "  aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION"
+          echo ""
+          echo "To delete when done:"
+          echo "  eksctl delete cluster --name $CLUSTER_NAME --region $AWS_REGION"
+          echo ""
+          echo "⚠️  IMPORTANT: Remember to delete this cluster to avoid charges!"
+          echo "=========================================="

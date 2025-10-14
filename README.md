@@ -369,6 +369,8 @@ error: no matches for kind "SnapshotMetadataService" in version "cbt.storage.k8s
 
 **Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
 
+#### Option 1: Bring Your Own Cluster (BYOC)
+
 1. **Encode your kubeconfig**:
    ```bash
    # MacOS/Linux
@@ -383,13 +385,39 @@ error: no matches for kind "SnapshotMetadataService" in version "cbt.storage.k8s
    - Create a new secret named `KUBECONFIG`
    - Paste the base64-encoded kubeconfig content
 
-3. **Benefits of Remote Cluster**:
-   - ✅ Full block device support (no losetup limitations)
-   - ✅ Real CSI driver testing with block volumes
-   - ✅ Tests run on actual infrastructure (GKE, EKS, AKS, etc.)
-   - ⚠️ Ensure the cluster has sufficient resources and CSI support
+3. **Run the workflow** - it automatically detects and uses your cluster
 
-See [.github/workflows/demo.yaml](.github/workflows/demo.yaml) for the current CI configuration.
+#### Option 2: Automated EKS Cluster (AWS)
+
+Use the dedicated AWS workflow to automatically create and test on EKS:
+
+1. **Add AWS Secrets**:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION` (optional, defaults to us-east-1)
+
+2. **Run the workflow**:
+   - Go to Actions → "K8s CBT Demo on AWS EKS"
+   - Click "Run workflow"
+   - Optionally specify cluster name
+   - Choose whether to keep cluster after tests
+
+3. **Benefits**:
+   - ✅ Fully automated cluster creation and deletion
+   - ✅ Real EBS block device support
+   - ✅ AWS EBS CSI driver with snapshots
+   - ✅ Automatic cleanup (unless keep_cluster=true)
+   - ⚠️ Incurs AWS charges (~$0.10/hour for t3.medium instances)
+
+**Common Benefits of Remote Cluster Testing**:
+- ✅ Full block device support (no losetup limitations)
+- ✅ Real CSI driver testing with block volumes
+- ✅ Tests run on actual infrastructure
+- ⚠️ Ensure the cluster has sufficient resources and CSI support
+
+See workflows:
+- [demo.yaml](.github/workflows/demo.yaml) - Local Kind + BYOC support
+- [demo-aws.yaml](.github/workflows/demo-aws.yaml) - Automated EKS testing
 
 ## 🐛 Troubleshooting
 
