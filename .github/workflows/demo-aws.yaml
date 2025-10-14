@@ -1,6 +1,7 @@
 name: K8s CBT Demo on AWS EKS
 
 # This workflow creates a temporary EKS cluster for testing CBT with real block devices
+# Uses CSI hostpath driver with CBT support (AWS EBS CSI driver doesn't support CBT yet)
 # Requires AWS credentials as GitHub secrets:
 # - AWS_ACCESS_KEY_ID
 # - AWS_SECRET_ACCESS_KEY
@@ -21,7 +22,7 @@ on:
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
   CLUSTER_NAME: cbt-demo-${{ github.event.inputs.cluster_name || 'test' }}-${{ github.run_number }}
-  EKS_VERSION: '1.28'
+  EKS_VERSION: '1.34'  # CBT alpha support added in k8s 1.33, using 1.34 (latest)
 
 jobs:
   test-on-eks:
@@ -119,25 +120,15 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
-      - name: Install EBS Snapshot Controller
+      - name: Deploy CSI Driver with CBT
         run: |
-          echo "Installing EBS CSI snapshot controller..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          echo "Deploying CSI hostpath driver with Changed Block Tracking..."
+          ./scripts/02-deploy-csi-driver.sh
 
-          # Wait for snapshot controller
-          kubectl wait --for=condition=Ready pod -l app=snapshot-controller -n kube-system --timeout=120s || true
-
-      - name: Create VolumeSnapshotClass for EBS
+      - name: Validate CBT Setup
         run: |
-          cat <<EOF | kubectl apply -f -
-          apiVersion: snapshot.storage.k8s.io/v1
-          kind: VolumeSnapshotClass
-          metadata:
-            name: ebs-csi-snapclass
-          driver: ebs.csi.aws.com
-          deletionPolicy: Delete
-          EOF
+          echo "Validating CBT configuration..."
+          ./scripts/validate-cbt.sh
 
       - name: Deploy MinIO
         run: |
@@ -148,17 +139,10 @@ jobs:
           kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
           kubectl get pods -n cbt-demo -l app=minio
 
-      - name: Deploy PostgreSQL with EBS block volume
+      - name: Deploy PostgreSQL Workload
         run: |
-          echo "Deploying PostgreSQL with EBS block PVC..."
-
-          # Note: We'll use EBS CSI driver's storage class
-          # The deployment script may need adjustment for EBS
-          ./scripts/03-deploy-workload.sh || {
-            echo "Standard deployment failed, trying with EBS storage class..."
-            # Patch to use gp3 storage class if needed
-            kubectl get pvc -n cbt-demo
-          }
+          echo "Deploying PostgreSQL workload with block PVC..."
+          ./scripts/03-deploy-workload.sh
 
       - name: Verify PostgreSQL deployment
         run: |
@@ -191,7 +175,7 @@ jobs:
             name: postgres-snapshot-1
             namespace: cbt-demo
           spec:
-            volumeSnapshotClassName: ebs-csi-snapclass
+            volumeSnapshotClassName: csi-hostpath-snapclass
             source:
               persistentVolumeClaimName: $PVC_NAME
           EOF
@@ -251,8 +235,8 @@ jobs:
           kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
 
           echo "---"
-          echo "CSI controller logs:"
-          kubectl logs -n kube-system -l app=ebs-csi-controller --tail=100 || true
+          echo "CSI Driver Logs:"
+          kubectl logs -n kube-system -l app=csi-hostpathplugin --tail=100 || true
 
       - name: Cleanup namespace
         if: always()

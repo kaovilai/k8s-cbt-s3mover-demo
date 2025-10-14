@@ -20,6 +20,8 @@ This demo showcases:
 - Docker (for Kind)
 - ~10GB free disk space
 
+**CBT Support**: Changed Block Tracking API is available as an alpha feature starting in **Kubernetes 1.33**. For full CBT functionality, use Kubernetes 1.33 or later.
+
 ## 🏗️ Architecture
 
 ```
@@ -347,18 +349,25 @@ failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 - [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable (closed - resolved for test infrastructure)
 - [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments (closed)
 
-### SnapshotMetadataService CRD Availability
+### CBT API Availability
 
-**Issue**: Full CBT support requires SnapshotMetadataService CRD which is not yet available in stable releases.
+**Status**: Changed Block Tracking API was introduced as an **alpha feature in Kubernetes 1.33**.
 
-**Symptom**: CSI driver deployment shows:
-```
-error: no matches for kind "SnapshotMetadataService" in version "cbt.storage.k8s.io/v1alpha1"
-```
+**Requirements**:
+- Kubernetes 1.33 or later
+- CSI driver that implements the SnapshotMetadata gRPC service
+- Block volumes (not filesystem volumes)
+- Alpha feature gate enabled (enabled by default for alpha features)
 
-**Status**: The CRD is under active development in [kubernetes-csi/external-snapshot-metadata](https://github.com/kubernetes-csi/external-snapshot-metadata).
+**Current Driver Support**:
+- ✅ **CSI hostpath driver**: Implements CBT SnapshotMetadata service
+- ❌ **AWS EBS CSI driver**: Does not yet implement CBT (uses native EBS snapshots)
+- ✅ **Ceph CSI**: Full CBT implementation
 
-**Workaround**: Basic VolumeSnapshot functionality works without full CBT metadata API. The demo can still demonstrate snapshot creation and restore workflows.
+**Resources**:
+- [Kubernetes Blog: CBT Alpha Announcement](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
+- [KEP-3314: CSI Changed Block Tracking](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/3314-csi-changed-block-tracking/README.md)
+- [External Snapshot Metadata Sidecar](https://github.com/kubernetes-csi/external-snapshot-metadata)
 
 ### GitHub Actions CI
 
@@ -404,10 +413,12 @@ Use the dedicated AWS workflow to automatically create and test on EKS:
 
 3. **Benefits**:
    - ✅ Fully automated cluster creation and deletion
-   - ✅ Real EBS block device support
-   - ✅ AWS EBS CSI driver with snapshots
+   - ✅ Real block device support (no container limitations)
+   - ✅ CSI hostpath driver with CBT support (Kubernetes 1.33+)
    - ✅ Automatic cleanup (unless keep_cluster=true)
    - ⚠️ Incurs AWS charges (~$0.10/hour for t3.medium instances)
+
+**Note**: Uses CSI hostpath driver with CBT support. AWS EBS CSI driver doesn't implement the CBT SnapshotMetadata API yet.
 
 **Common Benefits of Remote Cluster Testing**:
 - ✅ Full block device support (no losetup limitations)
