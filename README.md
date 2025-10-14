@@ -278,6 +278,49 @@ type BlockMetadata struct {
 }
 ```
 
+## ⚠️ Known Limitations
+
+### Block Device Support in Containers
+
+**Issue**: Block device provisioning fails in containerized environments (Codespaces, Docker Desktop, etc.)
+
+**Symptom**: PVCs with `volumeMode: Block` remain in `Pending` state with errors:
+```
+failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
+```
+
+**Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`, which is restricted in containerized environments for security reasons.
+
+**Workaround**:
+1. Run on bare metal Kubernetes or VM-based clusters (e.g., real Kind on Linux VM, GKE, EKS)
+2. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
+
+**Related Issues**:
+- [kubernetes-csi/csi-driver-host-path#334](https://github.com/kubernetes-csi/csi-driver-host-path/issues/334) - Block volumes in containers
+- [kubernetes-sigs/kind#1934](https://github.com/kubernetes-sigs/kind/issues/1934) - Loop device support
+
+### SnapshotMetadataService CRD Availability
+
+**Issue**: Full CBT support requires SnapshotMetadataService CRD which is not yet available in stable releases.
+
+**Symptom**: CSI driver deployment shows:
+```
+error: no matches for kind "SnapshotMetadataService" in version "cbt.storage.k8s.io/v1alpha1"
+```
+
+**Status**: The CRD is under active development in [kubernetes-csi/external-snapshot-metadata](https://github.com/kubernetes-csi/external-snapshot-metadata).
+
+**Workaround**: Basic VolumeSnapshot functionality works without full CBT metadata API. The demo can still demonstrate snapshot creation and restore workflows.
+
+### GitHub Actions CI
+
+**Status**: CI workflow runs successfully with the following caveats:
+- Block device tests are skipped due to container limitations
+- Full CBT metadata API tests are skipped pending CRD availability
+- Basic snapshot and MinIO integration tests pass
+
+See [.github/workflows/demo.yaml](.github/workflows/demo.yaml) for the current CI configuration.
+
 ## 🐛 Troubleshooting
 
 ### CSI Driver not starting
@@ -296,6 +339,9 @@ kubectl get pods -n kube-system -l app=csi-hostpathplugin -o yaml | grep -i meta
 ```bash
 # Check if PVC is using volumeMode: Block
 kubectl get pvc -n cbt-demo -o yaml | grep volumeMode
+
+# Check for losetup errors in CSI driver logs
+kubectl describe pvc <pvc-name> -n cbt-demo
 ```
 
 ### MinIO connection issues

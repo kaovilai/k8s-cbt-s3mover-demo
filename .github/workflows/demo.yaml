@@ -1,5 +1,11 @@
 name: K8s CBT S3Mover Demo
 
+# Note: This workflow has known limitations in CI environments:
+# - Block device provisioning is skipped (requires privileged containers)
+# - Full CBT metadata API is not available (pending CRD release)
+# - Basic snapshot functionality and integration tests work correctly
+# See README.md "Known Limitations" section for details
+
 on:
   push:
     branches: [ main, develop ]
