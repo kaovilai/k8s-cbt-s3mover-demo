@@ -14,7 +14,7 @@ echo "  - All data in the database"
 echo ""
 echo "Snapshots in S3/MinIO will be PRESERVED for restore."
 echo ""
-read -p "Are you sure you want to continue? (type 'yes' to proceed): " CONFIRM
+read -r -p "Are you sure you want to continue? (type 'yes' to proceed): " CONFIRM
 
 if [ "$CONFIRM" != "yes" ]; then
     echo "Aborted."

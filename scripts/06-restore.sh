@@ -29,7 +29,7 @@ echo "  Name:        $SNAPSHOT_NAME"
 echo "  Size:        $SNAPSHOT_SIZE"
 echo "  Source PVC:  $SOURCE_PVC"
 echo ""
-read -p "Press Enter to continue with restore..."
+read -r -p "Press Enter to continue with restore..."
 
 # Restore PostgreSQL StatefulSet (it will create PVCs from snapshot)
 echo ""

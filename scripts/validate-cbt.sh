@@ -37,7 +37,7 @@ fi
 echo ""
 echo "Checking CSI driver pods..."
 if kubectl get pods -n kube-system -l app=csi-hostpathplugin &> /dev/null; then
-    PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+    PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep -c Running)
     if [ "$PODS" -gt 0 ]; then
         echo "✓ CSI hostpath driver pods are running ($PODS)"
         kubectl get pods -n kube-system -l app=csi-hostpathplugin
@@ -50,7 +50,7 @@ if kubectl get pods -n kube-system -l app=csi-hostpathplugin &> /dev/null; then
         RETRIES=0
         MAX_RETRIES=15
         while [ $RETRIES -lt $MAX_RETRIES ]; do
-            RUNNING_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+            RUNNING_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep -c Running)
             if [ "$RUNNING_PODS" -gt 0 ]; then
                 echo "✓ CSI driver pods are now running ($RUNNING_PODS)"
                 kubectl get pods -n kube-system -l app=csi-hostpathplugin
@@ -61,7 +61,7 @@ if kubectl get pods -n kube-system -l app=csi-hostpathplugin &> /dev/null; then
         done
 
         # Check again after waiting
-        FINAL_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep Running | wc -l)
+        FINAL_PODS=$(kubectl get pods -n kube-system -l app=csi-hostpathplugin --no-headers | grep -c Running)
         if [ "$FINAL_PODS" -eq 0 ]; then
             echo "✗ CSI hostpath driver pods are still not running"
             EXIT_CODE=1

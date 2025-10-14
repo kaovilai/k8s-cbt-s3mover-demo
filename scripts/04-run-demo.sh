@@ -13,7 +13,7 @@ echo "4. Add even more data"
 echo "5. Create third snapshot (incremental backup)"
 echo "6. Verify all snapshots and backups"
 echo ""
-read -p "Press Enter to continue or Ctrl+C to cancel..."
+read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
 NAMESPACE="cbt-demo"
 
