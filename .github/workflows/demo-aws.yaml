@@ -109,7 +109,7 @@ jobs:
 
           echo ""
           echo "Kubernetes version:"
-          kubectl version --short
+          kubectl version --output=yaml | grep gitVersion
 
           echo ""
           echo "Storage classes:"
