@@ -357,7 +357,7 @@ failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 - Kubernetes 1.33 or later
 - CSI driver that implements the SnapshotMetadata gRPC service
 - Block volumes (not filesystem volumes)
-- Alpha feature gate enabled (enabled by default for alpha features)
+- No feature gates required (alpha APIs available by default in 1.33+)
 
 **Current Driver Support**:
 - ✅ **CSI hostpath driver**: Implements CBT SnapshotMetadata service

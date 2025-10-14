@@ -107,8 +107,17 @@ jobs:
           echo "Cluster nodes:"
           kubectl get nodes -o wide
 
+          echo ""
+          echo "Kubernetes version:"
+          kubectl version --short
+
+          echo ""
           echo "Storage classes:"
           kubectl get storageclass
+
+          echo ""
+          echo "Note: CBT alpha APIs are available by default in k8s 1.33+"
+          echo "No feature gates required - enabled through CSI driver implementation"
 
       - name: Install VolumeSnapshot CRDs
         run: |
