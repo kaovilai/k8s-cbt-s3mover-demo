@@ -102,6 +102,17 @@ jobs:
           echo "Deploying CSI hostpath driver with Changed Block Tracking..."
           ./scripts/02-deploy-csi-driver.sh
 
+          # Verify CBT CRD installation
+          echo ""
+          echo "Verifying SnapshotMetadataService CRD installation..."
+          if kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io &> /dev/null; then
+            echo "✓ SnapshotMetadataService CRD is properly installed"
+            kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io
+          else
+            echo "⚠️ Warning: SnapshotMetadataService CRD not found"
+            echo "CBT functionality may be limited"
+          fi
+
       - name: Validate CBT Setup
         run: |
           echo "Validating CBT configuration..."

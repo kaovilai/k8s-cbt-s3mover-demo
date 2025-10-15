@@ -261,7 +261,7 @@ Check that snapshot metadata service is available:
 
 ```bash
 # Check if SnapshotMetadataService CRD exists
-kubectl get crd snapshotmetadataservices.snapshotmetadata.storage.k8s.io
+kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io
 
 # Check if service is registered
 kubectl get snapshotmetadataservices -A
