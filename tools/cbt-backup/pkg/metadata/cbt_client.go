@@ -59,18 +59,40 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotID string) (
 
 // GetDeltaBlocks returns blocks that changed between two snapshots
 // This would call the CSI GetMetadataDelta RPC
+//
+// IMPORTANT: As of kubernetes-csi/external-snapshot-metadata PR #180, the API changed:
+//   - The field name changed from base_snapshot_name to base_snapshot_id
+//   - baseSnapshotID should now be the CSI snapshot handle (from VolumeSnapshotContent.Status.SnapshotHandle)
+//     rather than the VolumeSnapshot name
+//   - The CSI handle approach allows computing deltas even after the base snapshot has been deleted
+//
+// To obtain the CSI snapshot handle:
+//   1. Get VolumeSnapshot object
+//   2. Extract .status.boundVolumeSnapshotContentName
+//   3. Get VolumeSnapshotContent object
+//   4. Extract .status.snapshotHandle
+//
+// For backward compatibility, some implementations may still accept snapshot names, but
+// CSI handles are preferred and take precedence.
 func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotID, targetSnapshotID string) ([]blocks.BlockMetadata, error) {
 	// TODO: Implement full RPC call
 	// In a full implementation:
 	// req := &csi.GetMetadataDeltaRequest{
-	//     BaseSnapshotId: baseSnapshotID,
-	//     TargetSnapshotId: targetSnapshotID,
+	//     SecurityToken: token,                  // Audience-scoped auth token
+	//     Namespace: c.namespace,                // Kubernetes namespace
+	//     BaseSnapshotId: baseSnapshotID,        // CSI handle of base snapshot (PR #180)
+	//     TargetSnapshotName: targetSnapshotID,  // VolumeSnapshot name
 	//     StartingOffset: 0,
+	//     MaxResults: 1000,                      // Pagination
 	// }
 	// stream, err := c.client.GetMetadataDelta(ctx, req)
 	// for {
 	//     resp, err := stream.Recv()
+	//     if err == io.EOF {
+	//         break
+	//     }
 	//     // Process resp.BlockMetadata
+	//     // Accumulate blocks
 	// }
 
 	return nil, fmt.Errorf("CBT gRPC client not fully implemented - see TODO comments in cbt_client.go")

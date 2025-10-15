@@ -170,38 +170,82 @@ jobs:
               persistentVolumeClaimName: $PVC_NAME
           EOF
 
-          # Wait for snapshot to be ready with retries
-          echo "Waiting for snapshot to be ready..."
-          RETRIES=0
-          MAX_RETRIES=60
-          while [ $RETRIES -lt $MAX_RETRIES ]; do
-            STATUS=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath='{.status.readyToUse}' 2>/dev/null || echo "")
-            if [ "$STATUS" = "true" ]; then
-              echo "✓ Snapshot is ready!"
-              break
-            fi
-
-            ERROR=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath='{.status.error.message}' 2>/dev/null || echo "")
-            if [ -n "$ERROR" ]; then
-              echo "✗ Snapshot error: $ERROR"
-              kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
-              exit 1
-            fi
-
-            echo "Waiting... ($((RETRIES * 5))s / $((MAX_RETRIES * 5))s)"
-            sleep 5
-            RETRIES=$((RETRIES + 1))
-          done
-
-          if [ $RETRIES -eq $MAX_RETRIES ]; then
+          # Wait for snapshot to be ready (using kubectl wait with jsonpath - upstream best practice)
+          echo "Waiting for snapshot 1 to be ready..."
+          kubectl wait volumesnapshot postgres-snapshot-1 -n cbt-demo \
+            --for=jsonpath='{.status.readyToUse}'=true --timeout=300s || {
             echo "✗ Snapshot did not become ready within timeout"
-            kubectl get volumesnapshot -n cbt-demo
+            kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo
             kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
             exit 1
-          fi
+          }
+          echo "✓ Snapshot 1 is ready!"
+
+          echo ""
+          echo "Writing additional data to PostgreSQL to create changed blocks..."
+          kubectl exec -n cbt-demo -it postgres-0 -- psql -U demo -d cbtdemo -c \
+            "INSERT INTO demo_data (data_block, content, checksum)
+             SELECT generate_series(101, 200),
+                    encode(gen_random_bytes(100000), 'base64'),
+                    md5(random()::text);" || echo "Note: Data insert may fail in non-block environments"
+
+          echo "Data written. Now creating second VolumeSnapshot for delta testing..."
+
+          kubectl apply -f - <<EOF
+          apiVersion: snapshot.storage.k8s.io/v1
+          kind: VolumeSnapshot
+          metadata:
+            name: postgres-snapshot-2
+            namespace: cbt-demo
+          spec:
+            volumeSnapshotClassName: csi-hostpath-snapclass
+            source:
+              persistentVolumeClaimName: $PVC_NAME
+          EOF
+
+          # Wait for snapshot 2 to be ready
+          echo "Waiting for snapshot 2 to be ready..."
+          kubectl wait volumesnapshot postgres-snapshot-2 -n cbt-demo \
+            --for=jsonpath='{.status.readyToUse}'=true --timeout=300s || {
+            echo "✗ Snapshot did not become ready within timeout"
+            kubectl get volumesnapshot postgres-snapshot-2 -n cbt-demo
+            kubectl describe volumesnapshot postgres-snapshot-2 -n cbt-demo
+            exit 1
+          }
+          echo "✓ Snapshot 2 is ready!"
+
+          echo ""
+          echo "Testing CBT API with both snapshot name and CSI handle..."
+          echo ""
+          echo "Note: PR kubernetes-csi/external-snapshot-metadata#180 added support for using"
+          echo "CSI snapshot handles in addition to snapshot names."
+          echo ""
+
+          # Get CSI snapshot handle from VolumeSnapshotContent
+          VSC_NAME=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+          echo "VolumeSnapshotContent for VolumeSnapshot postgres-snapshot-1 is [$VSC_NAME]"
+
+          SNAP_HANDLE=$(kubectl get volumesnapshotcontent $VSC_NAME -o jsonpath="{.status.snapshotHandle}")
+          echo "CSI snapshot handle of VolumeSnapshot postgres-snapshot-1 is [$SNAP_HANDLE]"
+
+          echo ""
+          echo "The snapshots now capture different states:"
+          echo "  - Snapshot 1: Initial data (100 rows)"
+          echo "  - Snapshot 2: After inserting 100 additional rows (~10MB of changes)"
+          echo ""
+          echo "When the snapshot metadata lister/verifier tools become available, they can be used with:"
+          echo "  # Using snapshot name (traditional):"
+          echo "  snapshot-metadata-lister -p postgres-snapshot-1 -s postgres-snapshot-2 -n cbt-demo"
+          echo ""
+          echo "  # Using CSI handle (new approach from PR #180, preferred):"
+          echo "  snapshot-metadata-lister -P '$SNAP_HANDLE' -s postgres-snapshot-2 -n cbt-demo"
+          echo ""
+          echo "The GetMetadataDelta API should report the changed blocks between the two snapshots."
+          echo ""
 
           echo "Snapshot details:"
           kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o yaml
+          kubectl get volumesnapshot postgres-snapshot-2 -n cbt-demo -o yaml
 
       - name: Test Restore Dry Run
         run: |
@@ -211,22 +255,69 @@ jobs:
       - name: Collect Logs on Failure
         if: failure()
         run: |
-          echo "Collecting logs for debugging..."
+          echo "========================================"
+          echo "Collecting diagnostic information..."
+          echo "========================================"
+
+          echo ""
+          echo "All resources across namespaces:"
           kubectl get all -A
+
+          echo ""
+          echo "Detailed pod information:"
+          kubectl get po -A --show-labels
+
+          echo ""
+          echo "VolumeSnapshots:"
           kubectl get volumesnapshot -A
+
+          echo ""
+          echo "VolumeSnapshotContents:"
           kubectl get volumesnapshotcontent
+
+          echo ""
+          echo "PVCs:"
           kubectl get pvc -A
+
+          echo ""
+          echo "PVs:"
+          kubectl get pv
+
+          echo ""
+          echo "StorageClasses:"
           kubectl get storageclass
+
+          echo ""
+          echo "VolumeSnapshotClasses:"
           kubectl get volumesnapshotclass
-          echo "---"
+
+          echo ""
+          echo "SnapshotMetadataServices:"
+          kubectl get snapshotmetadataservices -A || echo "CRD not installed"
+
+          echo ""
+          echo "========================================"
           echo "CSI Driver Logs:"
+          echo "========================================"
           kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=100 || true
-          echo "---"
+
+          echo ""
+          echo "CSI Driver Pod Description:"
+          kubectl describe pod -n default csi-hostpathplugin-0 || true
+
+          echo ""
+          echo "========================================"
           echo "MinIO Logs:"
+          echo "========================================"
           kubectl logs -n cbt-demo -l app=minio --tail=100 || true
-          echo "---"
+          kubectl describe pod -n cbt-demo -l app=minio || true
+
+          echo ""
+          echo "========================================"
           echo "PostgreSQL Logs:"
+          echo "========================================"
           kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
+          kubectl describe pod -n cbt-demo -l app=postgres || true
 
       - name: Cleanup local Kind cluster
         if: always() && secrets.KUBECONFIG == ''

@@ -237,12 +237,18 @@ go build -o cbt-backup ./cmd
 # Full backup
 ./cbt-backup create --pvc my-pvc --snapshot snap-1
 
-# Incremental backup
+# Incremental backup (uses CSI snapshot handle internally)
 ./cbt-backup create --pvc my-pvc --snapshot snap-2 --base-snapshot snap-1
 
 # List backups
 ./cbt-backup list
 ```
+
+**Implementation Note**: When fully implemented, this tool will use the CSI snapshot handle
+(from `VolumeSnapshotContent.Status.SnapshotHandle`) for incremental backups, following
+the API changes in kubernetes-csi/external-snapshot-metadata PR #180. This allows computing
+deltas even after the base VolumeSnapshot object has been deleted, enabling more flexible
+snapshot retention policies.
 
 ### Restore Tool (`cbt-restore`)
 
@@ -315,6 +321,10 @@ Total: 1.3GB uploaded (saved 2.1GB!)
 GetMetadataAllocated(snapshotID) → []BlockMetadata
 
 // Get changed blocks between two snapshots
+// NOTE: As of kubernetes-csi/external-snapshot-metadata PR #180 (merged Oct 2025):
+//   - baseSnapshotID is now the CSI snapshot handle (not the VolumeSnapshot name)
+//   - Get the CSI handle from VolumeSnapshotContent.Status.SnapshotHandle
+//   - This allows computing deltas even after the base snapshot is deleted
 GetMetadataDelta(baseSnapshotID, targetSnapshotID) → []BlockMetadata
 
 // BlockMetadata contains:
@@ -324,30 +334,57 @@ type BlockMetadata struct {
 }
 ```
 
+**API Change History:**
+- **October 2025**: PR [kubernetes-csi/external-snapshot-metadata#180](https://github.com/kubernetes-csi/external-snapshot-metadata/pull/180) changed `GetMetadataDelta` to use CSI snapshot handles instead of snapshot names for the base snapshot parameter
+  - Field renamed: `base_snapshot_name` → `base_snapshot_id`
+  - Client tools now support both `-p <name>` and `-P <csi-handle>` flags
+  - CSI handle approach is preferred for production use
+
 ## ⚠️ Known Limitations
 
-### Block Device Support in Containers
+### Block Device Support
 
-**Issue**: Block device provisioning fails in containerized environments (Codespaces, Docker Desktop, etc.)
+**Status**: Block PVCs work with **minikube** and **cloud providers**, but have limitations with **Kind** in containerized environments.
 
-**Symptom**: PVCs with `volumeMode: Block` remain in `Pending` state with errors:
+| Environment | Block PVC Support | Notes |
+|-------------|-------------------|-------|
+| ✅ **Minikube** | Full support | VM-based, used by upstream CI |
+| ✅ **EKS/GKE/AKS** | Full support | Production environments |
+| ⚠️ **Kind** | Limited | Filesystem mode only in containers |
+| ⚠️ **Codespaces** | Limited | Docker-based, same as Kind |
+
+**Why Kind Has Limitations**:
+
+The CSI hostpath driver requires privileged access to create loop devices using `losetup`. Kind runs Kubernetes nodes as Docker containers, which receive a **static copy** of the host's `/dev` directory at startup. Loop devices created after container startup are not visible, causing `losetup -f` to fail.
+
+**Symptom**:
 ```
 failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 ```
 
-**Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`. In containerized environments (Docker, Codespaces), the container has a static copy of the host's `/dev` directory, so loop devices created after container startup are not visible, causing `losetup -f` to fail.
+**Solutions**:
 
-**Workaround**:
-1. **Use a remote cluster** (GKE, EKS, AKS, or bare metal) - see [Quick Start Option B](#option-b-remote-cluster-recommended-for-block-volumes)
-2. Run on VM-based local clusters (e.g., Kind on a Linux VM with host access)
-3. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
-4. Pre-create loop devices on the host before starting the container (requires host access)
+1. **Use Minikube** for local testing with block PVCs:
+   ```bash
+   # Start minikube
+   minikube start
 
-**Status**: This is a fundamental limitation of running block device workloads in nested containerized environments. While specific test infrastructure issues have been resolved, the underlying constraint remains for development environments like Codespaces.
+   # Deploy demo
+   ./scripts/02-deploy-csi-driver.sh
+   ```
 
-**Related Issues** (Historical):
-- [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable (closed - resolved for test infrastructure)
-- [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments (closed)
+2. **Use cloud providers** (recommended for full testing):
+   - See [Quick Start Option B](#option-b-remote-cluster-recommended-for-block-volumes)
+   - See [AWS EKS workflow](#option-2-automated-eks-cluster-aws)
+
+3. **Keep using Kind** with filesystem mode for conceptual demos:
+   - Our demo works with filesystem PVCs
+   - Shows snapshot workflow (even if not true block-level CBT)
+   - Faster for local development
+
+**Comparison**: See [docs/MINIKUBE_VS_KIND.md](docs/MINIKUBE_VS_KIND.md) for detailed comparison.
+
+**Upstream Reference**: The [kubernetes-csi/external-snapshot-metadata](https://github.com/kubernetes-csi/external-snapshot-metadata) project uses minikube for their integration tests specifically because it provides reliable block device support in CI.
 
 ### CBT API Availability
 
