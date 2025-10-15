@@ -50,14 +50,59 @@ This demo showcases:
 
 ## 🚀 Quick Start
 
-### Option A: Local Kind Cluster (Development)
+Choose your local setup based on your needs:
 
-**Note**: Block volumes have [known limitations](#known-limitations) in containerized environments.
+| Approach | Best For | Block PVCs | Setup Time | Resources |
+|----------|----------|------------|------------|-----------|
+| **Kind** | Fast development, learning | ❌ Limited | ~2 min | Low |
+| **Minikube** | Full CBT testing | ✅ Full support | ~5 min | Medium |
+| **Cloud (EKS)** | Production validation | ✅ Full support | ~15 min | High ($$) |
 
-#### 1. Setup the Cluster
+### Option A: Local Setup (macOS/Linux)
+
+#### Quick Start with Kind (Fast, Lightweight)
 
 ```bash
-# Create Kind cluster with CSI support
+# Run the complete demo - Kind cluster (filesystem mode)
+./scripts/run-local-macos.sh
+```
+
+**Best for**: Fast iteration, learning, conceptual demos
+**Block devices**: ⚠️ Limited (filesystem PVCs only)
+**Requirements**: Docker, `kind`, `kubectl`
+
+#### Full Testing with Minikube (Block Device Support)
+
+```bash
+# Run with minikube - Full block device support
+./scripts/run-local-minikube.sh
+```
+
+**Best for**: Testing actual CBT metadata, block PVCs
+**Block devices**: ✅ Full support (VM-based)
+**Requirements**: Docker, `minikube`, `kubectl`
+**Note**: Same setup as upstream CI tests
+
+**What both scripts do**:
+1. ✅ Check prerequisites
+2. ✅ Create Kubernetes cluster
+3. ✅ Deploy MinIO S3 storage
+4. ✅ Deploy CSI driver with CBT support
+5. ✅ Deploy PostgreSQL workload
+6. ✅ Create snapshots demonstrating CBT workflow
+
+**Install prerequisites** (macOS):
+```bash
+brew install kind kubectl        # For Kind
+brew install minikube kubectl    # For Minikube
+```
+
+#### Manual Step-by-Step Setup
+
+If you prefer to run each step manually:
+
+```bash
+# 1. Setup the Cluster
 ./scripts/00-setup-cluster.sh
 ```
 
@@ -101,10 +146,8 @@ If you prefer step-by-step control:
 # 2. Continue with standard deployment steps below
 ```
 
-### 2. Deploy MinIO (S3 Storage)
-
 ```bash
-# Deploy MinIO for backup storage
+# 2. Deploy MinIO for backup storage
 ./scripts/01-deploy-minio.sh
 ```
 
@@ -113,10 +156,8 @@ Access MinIO:
 - **Console**: http://localhost:30901
 - **Credentials**: minioadmin / minioadmin123
 
-### 3. Deploy CSI Driver with CBT
-
 ```bash
-# Deploy hostpath CSI driver with Changed Block Tracking support
+# 3. Deploy hostpath CSI driver with Changed Block Tracking support
 ./scripts/02-deploy-csi-driver.sh
 ```
 
@@ -126,11 +167,12 @@ This deploys:
 - SnapshotMetadataService CRD
 - VolumeSnapshotClass
 
-### 4. Deploy PostgreSQL Workload
-
 ```bash
-# Deploy PostgreSQL with block-mode PVC
+# 4. Deploy PostgreSQL with block-mode PVC
 ./scripts/03-deploy-workload.sh
+
+# 5. Run the demo workflow
+./scripts/04-run-demo.sh
 ```
 
 This creates:
@@ -500,10 +542,10 @@ kubectl run -it --rm debug --image=minio/mc --restart=Never -- \
 
 ## 🧹 Cleanup
 
-### Local Kind Cluster
+### Kind Cluster
 
 ```bash
-# Delete everything (Kind cluster and temp directories)
+# Delete Kind cluster and resources
 ./scripts/cleanup.sh
 ```
 
@@ -511,6 +553,13 @@ This removes:
 - Kind cluster
 - Temporary directories
 - Downloaded CSI driver repository
+
+### Minikube Cluster
+
+```bash
+# Delete minikube cluster
+minikube delete --profile cbt-demo
+```
 
 ### Remote Cluster
 
