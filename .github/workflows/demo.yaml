@@ -220,7 +220,7 @@ jobs:
           kubectl get volumesnapshotclass
           echo "---"
           echo "CSI Driver Logs:"
-          kubectl logs -n default -l app=csi-hostpathplugin --tail=100 || true
+          kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=100 || true
           echo "---"
           echo "MinIO Logs:"
           kubectl logs -n cbt-demo -l app=minio --tail=100 || true

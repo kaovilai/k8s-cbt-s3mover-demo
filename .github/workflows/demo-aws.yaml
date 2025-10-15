@@ -257,7 +257,7 @@ jobs:
 
           echo "---"
           echo "CSI Driver Logs:"
-          kubectl logs -n default -l app=csi-hostpathplugin --tail=100 || true
+          kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=100 || true
 
       - name: Cleanup namespace
         if: always()

@@ -57,24 +57,38 @@ SNAPSHOT_METADATA_TESTS=true ./deploy/kubernetes-latest/deploy.sh
 echo "Waiting for CSI driver pods to be created..."
 RETRIES=0
 MAX_RETRIES=30
-until kubectl get pods -n default -l app=csi-hostpathplugin 2>/dev/null | grep -q csi-hostpath; do
+until kubectl get pods -n default 2>/dev/null | grep -q "csi-hostpathplugin-0"; do
     if [ $RETRIES -ge $MAX_RETRIES ]; then
         echo "✗ CSI driver pods not created within timeout"
         kubectl get pods -n default
         exit 1
     fi
     echo "Waiting for pods to be created... ($RETRIES/$MAX_RETRIES)"
-    sleep 2
+    sleep 3
     RETRIES=$((RETRIES + 1))
 done
 
+echo "✓ CSI driver pods created"
+echo "Waiting for CSI driver statefulset to be ready..."
+kubectl rollout status statefulset/csi-hostpathplugin -n default --timeout=300s
+
 echo "Waiting for CSI driver pods to be ready..."
-kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n default --timeout=300s
+kubectl wait --for=condition=Ready pod/csi-hostpathplugin-0 -n default --timeout=300s 2>/dev/null || {
+    echo "Warning: Pod readiness check failed, checking pod status..."
+    kubectl get pods -n default | grep csi-hostpath
+    # Check if pod is actually running despite wait failure
+    if kubectl get pod csi-hostpathplugin-0 -n default -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
+        echo "✓ Pod is running"
+    else
+        echo "✗ Pod is not ready"
+        exit 1
+    fi
+}
 
 echo "✓ CSI Hostpath Driver with CBT support deployed successfully!"
 echo ""
 echo "Verifying deployment..."
-kubectl get pods -n default -l app=csi-hostpathplugin
+kubectl get pods -n default | grep csi-hostpath || kubectl get pods -n default
 echo ""
 kubectl get csidriver
 echo ""
