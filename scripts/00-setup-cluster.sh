@@ -32,7 +32,7 @@ fi
 
 # Create the cluster
 echo "Creating Kind cluster..."
-kind create cluster --config cluster/kind-config.yaml --wait 5m
+kind create cluster --config cluster/kind-config.yaml --wait 10m
 
 # Verify cluster is ready
 echo "Verifying cluster..."

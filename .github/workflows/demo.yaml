@@ -1,5 +1,18 @@
 name: K8s CBT S3Mover Demo
 
+# This workflow supports two modes:
+# 1. Local Kind cluster (default) - Limited by container restrictions
+#    - Block device provisioning is skipped (requires privileged containers)
+#    - Full CBT metadata API is not available (pending CRD release)
+#    - Basic snapshot functionality and integration tests work correctly
+#
+# 2. Remote cluster (optional) - Use real Kubernetes cluster with block device support
+#    - Set GitHub secret 'KUBECONFIG' with base64-encoded kubeconfig
+#    - Enables full block device testing and CBT functionality
+#    - Example: cat ~/.kube/config | base64 | pbcopy
+#
+# See README.md "Known Limitations" section for details
+
 on:
   push:
     branches: [ main, develop ]
@@ -21,16 +34,31 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Setup kubectl with remote cluster
+        if: ${{ secrets.KUBECONFIG != '' }}
+        run: |
+          echo "Using remote cluster from GitHub secrets..."
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+          kubectl cluster-info
+          kubectl get nodes
+
       - name: Install Kind
+        if: ${{ secrets.KUBECONFIG == '' }}
         uses: helm/kind-action@v1
         with:
           install_only: true
           version: v0.20.0
 
-      - name: Setup cluster
+      - name: Setup local Kind cluster
+        if: ${{ secrets.KUBECONFIG == '' }}
         run: |
           echo "Creating Kind cluster with CBT support..."
-          ./scripts/00-setup-cluster.sh
+          # Use minimal config for CI environment
+          kind create cluster --config cluster/kind-config-minimal.yaml --wait 10m
+          kubectl cluster-info
+          kubectl get nodes
 
       - name: Verify cluster
         run: |
@@ -59,10 +87,31 @@ jobs:
           echo "Verifying MinIO service..."
           kubectl get svc -n cbt-demo minio
 
+      - name: Install Snapshot CRDs
+        run: |
+          echo "Installing VolumeSnapshot CRDs..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+
       - name: Deploy CSI Driver with CBT
         run: |
           echo "Deploying CSI hostpath driver with Changed Block Tracking..."
           ./scripts/02-deploy-csi-driver.sh
+
+          # Verify CBT CRD installation
+          echo ""
+          echo "Verifying SnapshotMetadataService CRD installation..."
+          if kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io &> /dev/null; then
+            echo "✓ SnapshotMetadataService CRD is properly installed"
+            kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io
+          else
+            echo "⚠️ Warning: SnapshotMetadataService CRD not found"
+            echo "CBT functionality may be limited"
+          fi
 
       - name: Validate CBT Setup
         run: |
@@ -179,11 +228,18 @@ jobs:
           echo "PostgreSQL Logs:"
           kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
 
-      - name: Cleanup
-        if: always()
+      - name: Cleanup local Kind cluster
+        if: always() && secrets.KUBECONFIG == ''
         run: |
-          echo "Cleaning up..."
+          echo "Cleaning up local Kind cluster..."
           ./scripts/cleanup.sh || true
+
+      - name: Cleanup remote cluster resources
+        if: always() && secrets.KUBECONFIG != ''
+        run: |
+          echo "Cleaning up resources from remote cluster..."
+          kubectl delete namespace cbt-demo --ignore-not-found=true || true
+          echo "Remote cluster preserved, only namespace removed"
 
   build-backup-tool:
     runs-on: ubuntu-latest

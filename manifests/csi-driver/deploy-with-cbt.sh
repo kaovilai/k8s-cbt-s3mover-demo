@@ -31,6 +31,25 @@ fi
 
 cd "$CSI_DRIVER_DIR"
 
+# Install SnapshotMetadataService CRD first
+echo "Installing SnapshotMetadataService CRD..."
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/v0.1.0/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
+    echo "Warning: Could not install SnapshotMetadataService CRD from v0.1.0"
+    echo "Trying alternative location..."
+
+    # Alternative: Try from the main branch
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/main/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
+        echo "Warning: Could not install SnapshotMetadataService CRD"
+        echo "CBT functionality may be limited"
+    }
+}
+
+# Wait for CRD to be available
+echo "Waiting for CRD to be established..."
+kubectl wait --for=condition=Established crd/snapshotmetadataservices.cbt.storage.k8s.io --timeout=60s 2>/dev/null || {
+    echo "Note: SnapshotMetadataService CRD not established"
+}
+
 # Deploy with snapshot metadata support enabled
 echo "Deploying CSI driver with SNAPSHOT_METADATA_TESTS=true..."
 SNAPSHOT_METADATA_TESTS=true ./deploy/kubernetes-latest/deploy.sh
@@ -61,7 +80,7 @@ kubectl get csidriver
 echo ""
 
 # Check if SnapshotMetadataService CRD is installed
-if kubectl get crd snapshotmetadataservices.snapshotmetadata.storage.k8s.io &> /dev/null; then
+if kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io &> /dev/null; then
     echo "✓ SnapshotMetadataService CRD is installed"
     kubectl get snapshotmetadataservices -A 2>/dev/null || echo "No SnapshotMetadataService instances yet"
 else

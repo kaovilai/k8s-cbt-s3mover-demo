@@ -20,6 +20,8 @@ This demo showcases:
 - Docker (for Kind)
 - ~10GB free disk space
 
+**CBT Support**: Changed Block Tracking API is available as an alpha feature starting in **Kubernetes 1.33**. For full CBT functionality, use Kubernetes 1.33 or later.
+
 ## 🏗️ Architecture
 
 ```
@@ -48,11 +50,55 @@ This demo showcases:
 
 ## 🚀 Quick Start
 
-### 1. Setup the Cluster
+### Option A: Local Kind Cluster (Development)
+
+**Note**: Block volumes have [known limitations](#known-limitations) in containerized environments.
+
+#### 1. Setup the Cluster
 
 ```bash
 # Create Kind cluster with CSI support
 ./scripts/00-setup-cluster.sh
+```
+
+### Option B: Remote Cluster (Recommended for Block Volumes)
+
+Use this approach to run the demo on a real Kubernetes cluster with proper block device support.
+
+#### 1. Setup Your Cluster Connection
+
+```bash
+# Set your kubeconfig
+export KUBECONFIG=/path/to/your/kubeconfig
+
+# Verify connectivity
+kubectl cluster-info
+```
+
+#### 2. Run Automated Setup
+
+```bash
+# Run the complete demo setup on remote cluster
+./scripts/run-demo-remote.sh
+```
+
+This will:
+- Verify cluster connectivity
+- Deploy MinIO for S3 storage
+- Install VolumeSnapshot CRDs (if needed)
+- Optionally install CSI driver
+- Deploy PostgreSQL workload
+- Validate the setup
+
+#### Manual Remote Cluster Setup
+
+If you prefer step-by-step control:
+
+```bash
+# 1. Verify cluster
+./scripts/00-setup-remote-cluster.sh
+
+# 2. Continue with standard deployment steps below
 ```
 
 ### 2. Deploy MinIO (S3 Storage)
@@ -215,7 +261,7 @@ Check that snapshot metadata service is available:
 
 ```bash
 # Check if SnapshotMetadataService CRD exists
-kubectl get crd snapshotmetadataservices.snapshotmetadata.storage.k8s.io
+kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io
 
 # Check if service is registered
 kubectl get snapshotmetadataservices -A
@@ -278,6 +324,112 @@ type BlockMetadata struct {
 }
 ```
 
+## ⚠️ Known Limitations
+
+### Block Device Support in Containers
+
+**Issue**: Block device provisioning fails in containerized environments (Codespaces, Docker Desktop, etc.)
+
+**Symptom**: PVCs with `volumeMode: Block` remain in `Pending` state with errors:
+```
+failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
+```
+
+**Root Cause**: The CSI hostpath driver requires privileged access to create loop devices using `losetup`. In containerized environments (Docker, Codespaces), the container has a static copy of the host's `/dev` directory, so loop devices created after container startup are not visible, causing `losetup -f` to fail.
+
+**Workaround**:
+1. **Use a remote cluster** (GKE, EKS, AKS, or bare metal) - see [Quick Start Option B](#option-b-remote-cluster-recommended-for-block-volumes)
+2. Run on VM-based local clusters (e.g., Kind on a Linux VM with host access)
+3. Use filesystem volumes (`volumeMode: Filesystem`) for testing (though CBT requires block mode in production)
+4. Pre-create loop devices on the host before starting the container (requires host access)
+
+**Status**: This is a fundamental limitation of running block device workloads in nested containerized environments. While specific test infrastructure issues have been resolved, the underlying constraint remains for development environments like Codespaces.
+
+**Related Issues** (Historical):
+- [kubernetes-sigs/kind#1248](https://github.com/kubernetes-sigs/kind/issues/1248) - Number of loop devices is fixed and unpredictable (closed - resolved for test infrastructure)
+- [kubernetes-csi/csi-driver-host-path#119](https://github.com/kubernetes-csi/csi-driver-host-path/issues/119) - Block tests flaky in containerized environments (closed)
+
+### CBT API Availability
+
+**Status**: Changed Block Tracking API was introduced as an **alpha feature in Kubernetes 1.33**.
+
+**Requirements**:
+- Kubernetes 1.33 or later
+- CSI driver that implements the SnapshotMetadata gRPC service
+- Block volumes (not filesystem volumes)
+- No feature gates required (alpha APIs available by default in 1.33+)
+
+**Current Driver Support**:
+- ✅ **CSI hostpath driver**: Implements CBT SnapshotMetadata service
+- ❌ **AWS EBS CSI driver**: Does not yet implement CBT (uses native EBS snapshots)
+- ✅ **Ceph CSI**: Full CBT implementation
+
+**Resources**:
+- [Kubernetes Blog: CBT Alpha Announcement](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
+- [KEP-3314: CSI Changed Block Tracking](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/3314-csi-changed-block-tracking/README.md)
+- [External Snapshot Metadata Sidecar](https://github.com/kubernetes-csi/external-snapshot-metadata)
+
+### GitHub Actions CI
+
+**Status**: CI workflow runs successfully with the following caveats:
+- Block device tests are skipped due to container limitations (Kind cluster mode)
+- Full CBT metadata API tests are skipped pending CRD availability
+- Basic snapshot and MinIO integration tests pass
+
+**Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
+
+#### Option 1: Bring Your Own Cluster (BYOC)
+
+1. **Encode your kubeconfig**:
+   ```bash
+   # MacOS/Linux
+   cat ~/.kube/config | base64 | pbcopy
+
+   # Or save to file
+   cat ~/.kube/config | base64 > kubeconfig-b64.txt
+   ```
+
+2. **Add GitHub Secret**:
+   - Go to your repository Settings → Secrets and variables → Actions
+   - Create a new secret named `KUBECONFIG`
+   - Paste the base64-encoded kubeconfig content
+
+3. **Run the workflow** - it automatically detects and uses your cluster
+
+#### Option 2: Automated EKS Cluster (AWS)
+
+Use the dedicated AWS workflow to automatically create and test on EKS:
+
+1. **Add AWS Secrets**:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION` (optional, defaults to us-east-1)
+
+2. **Run the workflow**:
+   - Go to Actions → "K8s CBT Demo on AWS EKS"
+   - Click "Run workflow"
+   - Optionally specify cluster name
+   - Choose whether to keep cluster after tests
+
+3. **Benefits**:
+   - ✅ Fully automated cluster creation and deletion
+   - ✅ Real block device support (no container limitations)
+   - ✅ CSI hostpath driver with CBT support (Kubernetes 1.33+)
+   - ✅ Automatic cleanup (unless keep_cluster=true)
+   - ⚠️ Incurs AWS charges (~$0.10/hour for t3.medium instances)
+
+**Note**: Uses CSI hostpath driver with CBT support. AWS EBS CSI driver doesn't implement the CBT SnapshotMetadata API yet.
+
+**Common Benefits of Remote Cluster Testing**:
+- ✅ Full block device support (no losetup limitations)
+- ✅ Real CSI driver testing with block volumes
+- ✅ Tests run on actual infrastructure
+- ⚠️ Ensure the cluster has sufficient resources and CSI support
+
+See workflows:
+- [demo.yaml](.github/workflows/demo.yaml) - Local Kind + BYOC support
+- [demo-aws.yaml](.github/workflows/demo-aws.yaml) - Automated EKS testing
+
 ## 🐛 Troubleshooting
 
 ### CSI Driver not starting
@@ -296,6 +448,9 @@ kubectl get pods -n kube-system -l app=csi-hostpathplugin -o yaml | grep -i meta
 ```bash
 # Check if PVC is using volumeMode: Block
 kubectl get pvc -n cbt-demo -o yaml | grep volumeMode
+
+# Check for losetup errors in CSI driver logs
+kubectl describe pvc <pvc-name> -n cbt-demo
 ```
 
 ### MinIO connection issues
@@ -308,8 +463,10 @@ kubectl run -it --rm debug --image=minio/mc --restart=Never -- \
 
 ## 🧹 Cleanup
 
+### Local Kind Cluster
+
 ```bash
-# Delete everything
+# Delete everything (Kind cluster and temp directories)
 ./scripts/cleanup.sh
 ```
 
@@ -317,6 +474,18 @@ This removes:
 - Kind cluster
 - Temporary directories
 - Downloaded CSI driver repository
+
+### Remote Cluster
+
+```bash
+# Clean up demo resources from remote cluster
+./scripts/cleanup-remote-cluster.sh
+```
+
+This removes:
+- `cbt-demo` namespace and all resources
+- VolumeSnapshots and VolumeSnapshotContents
+- Does NOT remove: CSI driver, CRDs, or storage classes (manual cleanup if needed)
 
 ## 📚 References
 
