@@ -125,11 +125,11 @@ if kubectl get storageclass csi-hostpath-sc &> /dev/null; then
     echo "✓ StorageClass 'csi-hostpath-sc' exists"
     kubectl get storageclass csi-hostpath-sc
 else
-    echo "⚠ StorageClass 'csi-hostpath-sc' not found"
-    echo "  Note: The CSI driver can work without a dedicated StorageClass"
-    echo "  The demo will use the default StorageClass for PVC provisioning"
+    echo "✗ StorageClass 'csi-hostpath-sc' not found"
+    echo "  This StorageClass is required for CBT functionality"
     echo "  Available StorageClasses:"
     kubectl get storageclass
+    EXIT_CODE=1
 fi
 
 # Check for snapshots (if any exist)

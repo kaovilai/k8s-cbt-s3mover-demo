@@ -1,17 +1,17 @@
 name: K8s CBT S3Mover Demo
 
 # This workflow supports two modes:
-# 1. Local Kind cluster (default) - Limited by container restrictions
-#    - Block device provisioning is skipped (requires privileged containers)
-#    - Full CBT metadata API is not available (pending CRD release)
-#    - Basic snapshot functionality and integration tests work correctly
+# 1. Local Minikube cluster (default) - Full block device support via VM
+#    - Full CBT metadata API support
+#    - Block device provisioning works correctly
+#    - Same environment as upstream kubernetes-csi tests
 #
-# 2. Remote cluster (optional) - Use real Kubernetes cluster with block device support
+# 2. Remote cluster (optional) - Use real Kubernetes cluster
 #    - Set GitHub secret 'KUBECONFIG' with base64-encoded kubeconfig
-#    - Enables full block device testing and CBT functionality
+#    - Enables testing on production-like environments
 #    - Example: cat ~/.kube/config | base64 | pbcopy
 #
-# See README.md "Known Limitations" section for details
+# See README.md for details
 
 on:
   push:
@@ -46,19 +46,22 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Install Kind
+      - name: Setup Minikube
         if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
-        uses: helm/kind-action@v1
+        uses: medyagh/setup-minikube@latest
         with:
-          install_only: true
-          version: v0.20.0
+          minikube-version: latest
+          driver: docker
+          cpus: 4
+          memory: 8192
+          kubernetes-version: v1.30.0
+          container-runtime: containerd
+          addons: storage-provisioner,default-storageclass
 
-      - name: Setup local Kind cluster
+      - name: Verify Minikube cluster
         if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
         run: |
-          echo "Creating Kind cluster with CBT support..."
-          # Use minimal config for CI environment
-          kind create cluster --config cluster/kind-config-minimal.yaml --wait 10m
+          echo "Verifying Minikube cluster..."
           kubectl cluster-info
           kubectl get nodes
 
@@ -321,11 +324,11 @@ jobs:
           kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
           kubectl describe pod -n cbt-demo -l app=postgres || true
 
-      - name: Cleanup local Kind cluster
+      - name: Cleanup local Minikube cluster
         if: always() && env.USE_REMOTE_CLUSTER == 'false'
         run: |
-          echo "Cleaning up local Kind cluster..."
-          ./scripts/cleanup.sh || true
+          echo "Cleaning up local Minikube cluster..."
+          minikube delete || true
 
       - name: Cleanup remote cluster resources
         if: always() && env.USE_REMOTE_CLUSTER == 'true'

@@ -6,7 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: csi-hostpath-sc
   resources:
     requests:
       storage: 10Gi
-  # Will use default storage class
