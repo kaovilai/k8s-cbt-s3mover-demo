@@ -57,10 +57,10 @@ SNAPSHOT_METADATA_TESTS=true ./deploy/kubernetes-latest/deploy.sh
 echo "Waiting for CSI driver pods to be created..."
 RETRIES=0
 MAX_RETRIES=30
-until kubectl get pods -n kube-system -l app=csi-hostpathplugin 2>/dev/null | grep -q csi-hostpath; do
+until kubectl get pods -n default -l app=csi-hostpathplugin 2>/dev/null | grep -q csi-hostpath; do
     if [ $RETRIES -ge $MAX_RETRIES ]; then
         echo "✗ CSI driver pods not created within timeout"
-        kubectl get pods -n kube-system
+        kubectl get pods -n default
         exit 1
     fi
     echo "Waiting for pods to be created... ($RETRIES/$MAX_RETRIES)"
@@ -69,12 +69,12 @@ until kubectl get pods -n kube-system -l app=csi-hostpathplugin 2>/dev/null | gr
 done
 
 echo "Waiting for CSI driver pods to be ready..."
-kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n kube-system --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n default --timeout=300s
 
 echo "✓ CSI Hostpath Driver with CBT support deployed successfully!"
 echo ""
 echo "Verifying deployment..."
-kubectl get pods -n kube-system -l app=csi-hostpathplugin
+kubectl get pods -n default -l app=csi-hostpathplugin
 echo ""
 kubectl get csidriver
 echo ""

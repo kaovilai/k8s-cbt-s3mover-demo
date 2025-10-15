@@ -267,7 +267,7 @@ kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io
 kubectl get snapshotmetadataservices -A
 
 # Check CSI driver logs for metadata service
-kubectl logs -n kube-system -l app=csi-hostpathplugin -c hostpath | grep -i metadata
+kubectl logs -n default -l app=csi-hostpathplugin -c hostpath | grep -i metadata
 ```
 
 ## 📁 Project Structure
@@ -434,14 +434,14 @@ See workflows:
 
 ### CSI Driver not starting
 ```bash
-kubectl logs -n kube-system -l app=csi-hostpathplugin
+kubectl logs -n default -l app=csi-hostpathplugin
 # Check for errors in CSI driver logs
 ```
 
 ### SnapshotMetadataService not found
 ```bash
 # Ensure driver was deployed with SNAPSHOT_METADATA_TESTS=true
-kubectl get pods -n kube-system -l app=csi-hostpathplugin -o yaml | grep -i metadata
+kubectl get pods -n default -l app=csi-hostpathplugin -o yaml | grep -i metadata
 ```
 
 ### Block device issues

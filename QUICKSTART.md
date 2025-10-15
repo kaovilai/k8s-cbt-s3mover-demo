@@ -141,7 +141,7 @@ kubectl logs -n cbt-demo postgres-0 --tail=50
 kubectl logs -n cbt-demo -l app=minio --tail=50
 
 # CSI Driver logs
-kubectl logs -n kube-system -l app=csi-hostpathplugin --tail=50
+kubectl logs -n default -l app=csi-hostpathplugin --tail=50
 ```
 
 ### Check Resources
@@ -188,8 +188,8 @@ kubectl get deployment,service,pvc -n cbt-demo -l app=minio
 # PostgreSQL workload
 kubectl get statefulset,service,pvc -n cbt-demo -l app=postgres
 
-# CSI Driver (in kube-system)
-kubectl get pods -n kube-system -l app=csi-hostpathplugin
+# CSI Driver (in default namespace)
+kubectl get pods -n default -l app=csi-hostpathplugin
 ```
 
 ### Storage Resources
@@ -264,10 +264,10 @@ kubectl logs <pod-name> -n cbt-demo
 
 ```bash
 # Check CSI driver pods
-kubectl get pods -n kube-system -l app=csi-hostpathplugin
+kubectl get pods -n default -l app=csi-hostpathplugin
 
 # Check driver logs
-kubectl logs -n kube-system -l app=csi-hostpathplugin -c hostpath --tail=100
+kubectl logs -n default -l app=csi-hostpathplugin -c hostpath --tail=100
 
 # Check if SnapshotMetadataService CRD exists
 kubectl get crd | grep snapshotmetadata
