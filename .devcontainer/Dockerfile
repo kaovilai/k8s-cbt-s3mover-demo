@@ -78,6 +78,10 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   -x
 
+# Copy custom ZSH configuration with aliases
+COPY --chown=node:node .zshrc /home/node/.zshrc.devcontainer
+RUN echo "source /home/node/.zshrc.devcontainer" >> /home/node/.zshrc
+
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
