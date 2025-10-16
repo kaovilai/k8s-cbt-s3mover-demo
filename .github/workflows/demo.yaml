@@ -71,27 +71,6 @@ jobs:
           kubectl get nodes
           kubectl version
 
-      - name: Deploy MinIO
-        run: |
-          echo "Deploying MinIO S3 storage..."
-          ./scripts/01-deploy-minio.sh
-
-      - name: Verify MinIO
-        run: |
-          echo "Waiting for MinIO pod to be created..."
-          timeout 60 bash -c 'until kubectl get pod -n cbt-demo -l app=minio 2>/dev/null | grep -q minio; do sleep 2; done' || {
-            echo "MinIO pod not created within timeout"
-            kubectl get pods -n cbt-demo
-            exit 1
-          }
-
-          echo "Waiting for MinIO to be ready..."
-          kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
-          kubectl get pods -n cbt-demo -l app=minio
-
-          echo "Verifying MinIO service..."
-          kubectl get svc -n cbt-demo minio
-
       - name: Install Snapshot CRDs
         run: |
           echo "Installing VolumeSnapshot CRDs..."
@@ -122,6 +101,27 @@ jobs:
         run: |
           echo "Validating CBT configuration..."
           ./scripts/validate-cbt.sh
+
+      - name: Deploy MinIO
+        run: |
+          echo "Deploying MinIO S3 storage..."
+          ./scripts/01-deploy-minio.sh
+
+      - name: Verify MinIO
+        run: |
+          echo "Waiting for MinIO pod to be created..."
+          timeout 60 bash -c 'until kubectl get pod -n cbt-demo -l app=minio 2>/dev/null | grep -q minio; do sleep 2; done' || {
+            echo "MinIO pod not created within timeout"
+            kubectl get pods -n cbt-demo
+            exit 1
+          }
+
+          echo "Waiting for MinIO to be ready..."
+          kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
+          kubectl get pods -n cbt-demo -l app=minio
+
+          echo "Verifying MinIO service..."
+          kubectl get svc -n cbt-demo minio
 
       - name: Deploy PostgreSQL Workload
         run: |
