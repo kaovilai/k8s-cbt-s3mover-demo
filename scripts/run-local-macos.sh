@@ -26,7 +26,6 @@ command_exists() {
 # Function to check version
 check_version() {
     local cmd=$1
-    local min_version=$2
     local current_version
 
     case $cmd in

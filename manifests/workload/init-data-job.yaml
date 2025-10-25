@@ -27,7 +27,7 @@ spec:
         args:
           - |
             echo "Waiting for PostgreSQL to be ready..."
-            until pg_isready; do
+            until pg_isready -d cbtdemo; do
               echo "Waiting..."
               sleep 2
             done
@@ -45,16 +45,13 @@ spec:
             CREATE INDEX idx_data_block ON demo_data(data_block);
             EOF
 
-            echo "Populating initial data (~100MB)..."
+            echo "Populating initial data (10 rows for testing)..."
             # Generate data in blocks for easier tracking of changes
-            for block in {1..1000}; do
+            for block in {1..10}; do
               DATA=$(head -c 100000 /dev/urandom | base64 | head -c 100000)
               CHECKSUM=$(echo -n "$DATA" | sha256sum | awk '{print $1}')
               psql -c "INSERT INTO demo_data (data_block, content, checksum) VALUES ($block, '$DATA', '$CHECKSUM');"
-
-              if [ $((block % 100)) -eq 0 ]; then
-                echo "Inserted $block blocks..."
-              fi
+              echo "Inserted block $block..."
             done
 
             echo "Initial data population complete!"

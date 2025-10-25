@@ -107,7 +107,7 @@ spec:
             command:
             - /bin/sh
             - -c
-            - pg_isready -U demo
+            - pg_isready -U demo -d cbtdemo
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
@@ -115,7 +115,7 @@ spec:
             command:
             - /bin/sh
             - -c
-            - pg_isready -U demo
+            - pg_isready -U demo -d cbtdemo
           initialDelaySeconds: 10
           periodSeconds: 5
   volumeClaimTemplates:
