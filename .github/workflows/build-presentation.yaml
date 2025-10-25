@@ -28,7 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-
+      - run: pwd
+      - run: ls -la
       - name: Setup @antfu/ni
         run: npm i -g @antfu/ni
 
