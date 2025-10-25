@@ -291,13 +291,22 @@ jobs:
         run: |
           echo ""
           echo "Writing additional data to PostgreSQL to create changed blocks..."
-          kubectl exec -n cbt-demo -it postgres-0 -- psql -U demo -d cbtdemo -c \
+
+          # Enable pgcrypto extension and insert data
+          kubectl exec -n cbt-demo postgres-0 -- psql -U demo -d cbtdemo -c \
+            "CREATE EXTENSION IF NOT EXISTS pgcrypto;" || echo "Note: pgcrypto may already be enabled"
+
+          kubectl exec -n cbt-demo postgres-0 -- psql -U demo -d cbtdemo -c \
             "INSERT INTO demo_data (data_block, content, checksum)
              SELECT generate_series(101, 200),
                     encode(gen_random_bytes(100000), 'base64'),
                     md5(random()::text);" || echo "Note: Data insert may fail in non-block environments"
 
           echo "Data written. Now creating second VolumeSnapshot for delta testing..."
+
+          # Get the actual PVC name
+          PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+          echo "PVC Name: $PVC_NAME"
 
           kubectl apply -f - <<EOF
           apiVersion: snapshot.storage.k8s.io/v1
