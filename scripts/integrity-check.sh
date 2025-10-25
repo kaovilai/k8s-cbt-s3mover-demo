@@ -175,8 +175,7 @@ if kubectl get pod -n cbt-demo -l app=minio &> /dev/null; then
                 echo 'Storage usage:'
                 mc du local/snapshots/
             else
-                echo '✗ Snapshots bucket not found'
-                exit 1
+                echo '⚠ Snapshots bucket not found (no backups created yet)'
             fi
         " || {
             echo "✗ Failed to check S3 backup files"
