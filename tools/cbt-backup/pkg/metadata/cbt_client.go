@@ -144,10 +144,12 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string)
 
 		// Convert CSI BlockMetadata to our format
 		if resp.BlockMetadata != nil {
-			blockList = append(blockList, blocks.BlockMetadata{
-				Offset: resp.BlockMetadata.ByteOffset,
-				Size:   resp.BlockMetadata.SizeBytes,
-			})
+			for _, block := range resp.BlockMetadata {
+				blockList = append(blockList, blocks.BlockMetadata{
+					Offset: block.ByteOffset,
+					Size:   block.SizeBytes,
+				})
+			}
 		}
 	}
 
@@ -235,10 +237,12 @@ func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotName, target
 
 		// Convert CSI BlockMetadata to our format
 		if resp.BlockMetadata != nil {
-			blockList = append(blockList, blocks.BlockMetadata{
-				Offset: resp.BlockMetadata.ByteOffset,
-				Size:   resp.BlockMetadata.SizeBytes,
-			})
+			for _, block := range resp.BlockMetadata {
+				blockList = append(blockList, blocks.BlockMetadata{
+					Offset: block.ByteOffset,
+					Size:   block.SizeBytes,
+				})
+			}
 		}
 	}
 
