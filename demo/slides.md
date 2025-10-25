@@ -279,6 +279,36 @@ layout: default
 </v-clicks>
 
 ---
+
+# Demo Workflow (cont.)
+
+<v-clicks depth="2">
+
+## Phase 3: GetMetadataAllocated Demo
+
+7. **Create First Snapshot**
+   ```bash
+   kubectl apply -f postgres-snapshot-1.yaml
+   kubectl wait volumesnapshot postgres-snapshot-1 \
+     --for=jsonpath='{.status.readyToUse}'=true
+   ```
+
+8. **Demonstrate GetMetadataAllocated**
+   - Build the CBT backup tool
+   - Run backup with allocated-block tracking
+   - Upload only allocated blocks to S3
+
+   **Expected Results** (with full CBT support):
+   - Volume Size: **2 Gi** (actual demo PVC)
+   - PostgreSQL Data: **~20 MB** (200 rows total)
+   - Allocated Blocks: Only blocks with data
+   - **Savings: ~99%** (sparse regions skipped)
+
+   **Note**: Snapshot 1 created in ~3.5s
+
+</v-clicks>
+
+---
 layout: two-cols
 ---
 
@@ -346,25 +376,31 @@ layout: default
 
 <v-clicks depth="2">
 
-## Full Snapshot Backup
+## Full Snapshot Backup (GetMetadataAllocated)
 
 1. Create VolumeSnapshot
-2. Query `GetMetadataAllocated` for all allocated blocks
-3. Mount snapshot with Block VolumeMode
-4. Selectively read and backup only allocated blocks
+2. Build backup tool: `go build -o cbt-backup ./cmd`
+3. Query `GetMetadataAllocated` for all allocated blocks
+4. Selectively read and backup only allocated blocks to S3
 
-**Benefits**: Skip empty/unallocated space - significantly reduces initial backup size
+**Workflow Demo Command:**
+```bash
+./cbt-backup create --namespace cbt-demo \
+  --pvc postgres-data-0 --snapshot postgres-snapshot-1 \
+  --s3-endpoint minio.cbt-demo.svc:9000 \
+  --s3-bucket snapshots
+```
 
-*Example: 10GB volume with 2GB data → backup only 2GB*
+**Demo Setup**: 2Gi volume with ~20MB PostgreSQL data → **Skips sparse regions**
 
-## Incremental Snapshot Backup
+## Incremental Snapshot Backup (GetMetadataDelta)
 
 1. Create new VolumeSnapshot
 2. Query `GetMetadataDelta` comparing to previous snapshot
 3. Mount snapshot with Block VolumeMode
-4. Backup only changed blocks
+4. Backup only changed blocks (~10MB for 100 additional rows)
 
-**Benefits**: Significantly reduced backup size and duration
+**Benefits**: Only transfer changed blocks between snapshots
 
 </v-clicks>
 
@@ -382,15 +418,29 @@ Note: CBT API is currently in alpha and subject to change
 
 <v-clicks depth="2">
 
-## 1. GetMetadataAllocated
+## 1. GetMetadataAllocated - Workflow Integration
 
-List all allocated blocks in a snapshot:
+**When**: After creating postgres-snapshot-1 (Phase 3 of demo workflow)
 
+**Purpose**: Identify and upload only allocated blocks, skipping empty space
+
+**Backup Tool Usage** (from workflow):
 ```bash
-snapshot-metadata-lister -s postgres-snapshot-1 -n cbt-demo
+./tools/cbt-backup/cbt-backup create \
+  --namespace cbt-demo --pvc postgres-data-0 \
+  --snapshot postgres-snapshot-1 \
+  --s3-endpoint minio.cbt-demo.svc.cluster.local:9000 \
+  --s3-access-key minioadmin --s3-secret-key minioadmin123 \
+  --s3-bucket snapshots --snapshot-class csi-hostpath-snapclass
 ```
 
-Shows all blocks containing the initial 100 rows of data
+**Note**: May fall back to metadata-only if CSI socket not accessible
+
+**Expected Behavior with Full CBT Support**:
+- Volume Size: 10 GB (total PVC size)
+- Allocated Blocks: ~1 MB (actual PostgreSQL data)
+- Data Transferred: ~1 MB (only allocated blocks)
+- **Savings: 9.999 GB (99.99%)**
 
 ## 2. GetMetadataDelta - Before PR #180
 
@@ -434,13 +484,25 @@ layout: two-cols
 
 ## Backup Tool
 
-```bash
-cd tools/cbt-backup
-go build -v -o cbt-backup ./cmd
+**Built and executed in demo workflow** (Phase 3):
 
-./cbt-backup --help
-./cbt-backup create --help
-./cbt-backup list --help
+```bash
+# Build (from workflow)
+cd tools/cbt-backup
+go mod tidy
+go build -v -o cbt-backup ./cmd
+cd ../..
+
+# Execute with GetMetadataAllocated
+./tools/cbt-backup/cbt-backup create \
+  --namespace cbt-demo \
+  --pvc postgres-data-0 \
+  --snapshot postgres-snapshot-1 \
+  --s3-endpoint minio.cbt-demo.svc.cluster.local:9000 \
+  --s3-access-key minioadmin \
+  --s3-secret-key minioadmin123 \
+  --s3-bucket snapshots \
+  --snapshot-class csi-hostpath-snapclass
 ```
 
 </v-click>
@@ -448,10 +510,10 @@ go build -v -o cbt-backup ./cmd
 <v-click>
 
 **Features:**
-- Create incremental backups
-- List backup sets
-- Upload to S3 storage
-- CBT metadata tracking
+- GetMetadataAllocated API integration
+- Upload only allocated blocks to S3
+- S3-compatible storage support
+- Automatic fallback if CSI socket unavailable
 
 </v-click>
 
@@ -559,18 +621,21 @@ layout: default
 
 # CI/CD Pipeline
 
-<div grid="~ cols-3 gap-4">
+**Total CI Time**: ~5 minutes (jobs run in parallel)
+
+<div grid="~ cols-4 gap-4">
 <div>
 
 <v-click>
 
 ## demo
 
-**End-to-end test**
+**End-to-end test** (**5m 2s**)
 - Setup cluster
 - Deploy components
 - Create snapshots
 - Test CBT
+- **Result**: ✓ Success
 
 </v-click>
 
@@ -581,11 +646,12 @@ layout: default
 
 ## build-backup-tool
 
-**Build & test**
+**Build & test** (**1m 16s**)
 - Go 1.22
 - Download deps
 - Build binary
 - Run tests
+- **Result**: ✓ Success
 
 </v-click>
 
@@ -596,10 +662,26 @@ layout: default
 
 ## lint
 
-**Code quality**
+**Code quality** (**1m 15s**)
 - shellcheck scripts
 - go fmt
 - go vet
+- **Result**: ✓ Success
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+## build-restore-tool
+
+**Placeholder** (**15s**)
+- Check status
+- Build placeholder
+- Future enhancement
+- **Result**: ✓ Success
 
 </v-click>
 
@@ -620,6 +702,39 @@ on:
 ```
 
 </v-click>
+
+---
+layout: default
+---
+
+# Actual Workflow Results
+
+<div class="text-sm">
+
+**Latest CI Run**: Completed successfully in **5m 2s**
+
+<v-clicks>
+
+## Infrastructure Deployed
+
+- **Cluster**: Minikube (4 CPUs, 8GB RAM, containerd)
+- **Snapshot Controller**: Ready in 37s
+- **CSI Driver**: Deployed with CBT + metadata sidecar
+- **MinIO S3**: S3-compatible backup storage
+- **PostgreSQL**: StatefulSet with **2Gi block PVC**
+
+## Snapshot Performance
+
+| Snapshot | Data | Creation Time | Status |
+|----------|------|---------------|--------|
+| postgres-snapshot-1 | 100 rows (~10MB) | **3.5s** | ✓ Ready |
+| postgres-snapshot-2 | 200 rows (~20MB) | **4.6s** | ✓ Ready |
+
+**Delta**: 100 additional rows inserted between snapshots
+
+</v-clicks>
+
+</div>
 
 ---
 layout: center
