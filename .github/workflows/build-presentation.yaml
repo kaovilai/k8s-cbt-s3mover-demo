@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: 'lts/*'
 
+      - name: go to demo dir
+        run: cd demo
+
       - name: Setup @antfu/ni
         run: npm i -g @antfu/ni
 
@@ -32,7 +35,7 @@ jobs:
         run: nci
 
       - name: Build
-        run: nr build --base /${{github.event.repository.name}}/demo/
+        run: nr build --base /${{github.event.repository.name}}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
