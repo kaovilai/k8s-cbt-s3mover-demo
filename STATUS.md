@@ -193,12 +193,25 @@ You can already:
    ./scripts/03-deploy-workload.sh
    ```
 
-2. **Validate CBT is working**:
+2. **Run the complete demo**:
+   ```bash
+   ./scripts/04-run-demo.sh
+   ```
+
+3. **Validate CBT is working**:
    ```bash
    ./scripts/validate-cbt.sh
    ```
 
-3. **Create snapshots manually**:
+4. **Use the backup tool** (metadata operations):
+   ```bash
+   cd tools/cbt-backup
+   go build -o cbt-backup ./cmd
+   ./cbt-backup create --pvc postgres-data-postgres-0
+   ./cbt-backup list
+   ```
+
+5. **Create snapshots manually**:
    ```bash
    kubectl apply -f - <<EOF
    apiVersion: snapshot.storage.k8s.io/v1
@@ -213,7 +226,7 @@ You can already:
    EOF
    ```
 
-4. **Check status**:
+6. **Check status**:
    ```bash
    ./scripts/backup-status.sh
    ./scripts/integrity-check.sh
