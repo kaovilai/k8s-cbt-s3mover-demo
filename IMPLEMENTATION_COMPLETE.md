@@ -36,7 +36,7 @@ The Kubernetes Changed Block Tracking (CBT) demo project is now **functionally c
 - ✅ `integrity-check.sh` - Verifies data integrity
 - ✅ `cleanup.sh` - Complete cleanup
 
-### Backup Tool (85%)
+### Backup Tool (90%)
 
 Located in [`tools/cbt-backup/`](tools/cbt-backup/)
 
@@ -49,14 +49,17 @@ Located in [`tools/cbt-backup/`](tools/cbt-backup/)
 - ✅ **Full Backup Workflow** - Creates snapshots and uploads metadata
 - ✅ **Dockerfile** - Multi-stage build for containerization
 - ✅ **README Documentation** - Complete usage guide
+- ✅ **gRPC Client for SnapshotMetadata** - See [`pkg/metadata/cbt_client.go`](tools/cbt-backup/pkg/metadata/cbt_client.go)
+  - ✅ Discovery of SnapshotMetadataService endpoint
+  - ✅ gRPC connection over Unix socket
+  - ✅ GetMetadataAllocated RPC implementation with streaming
+  - ✅ GetMetadataDelta RPC implementation for incremental backups
+  - ✅ CSI snapshot handle support per PR #180
 
-#### TODO (15%):
-- ⚠️ **gRPC Client for SnapshotMetadata** - See [`pkg/metadata/cbt_client.go`](tools/cbt-backup/pkg/metadata/cbt_client.go)
-  - Discovery of SnapshotMetadataService endpoint
-  - gRPC connection over Unix socket
-  - GetMetadataAllocated RPC implementation
-  - GetMetadataDelta RPC implementation for incremental backups
-- ⚠️ **Block Data Upload** - Upload actual block data to S3
+#### TODO (10%):
+- ⚠️ **Block Data Upload** - Upload actual block data to S3 (metadata-only currently)
+- ⚠️ **Parallel Uploads** - Optimize performance with concurrent block uploads
+- ⚠️ **Compression** - Add block compression support
 
 ### Documentation (100%)
 
@@ -246,26 +249,25 @@ This demo teaches:
 
 ## 📝 Known Limitations
 
-### gRPC Client (15% TODO)
+### Block Data Upload (10% TODO)
 
-The CBT gRPC client requires additional implementation:
+The backup tool is fully functional for metadata operations but needs block data upload:
 
-**Location**: `tools/cbt-backup/pkg/metadata/cbt_client.go`
+**Location**: `tools/cbt-backup/pkg/blocks/reader.go` and integration in `cmd/main.go`
 
 **What's needed**:
-1. Discover SnapshotMetadataService endpoint from K8s API
-2. Establish gRPC connection over Unix socket
-3. Implement `GetMetadataAllocated()` streaming RPC
-4. Implement `GetMetadataDelta()` streaming RPC
-5. Convert CSI BlockMetadata to internal format
+1. Read actual block data from block device using BlockMetadata offsets
+2. Upload block data to S3 alongside metadata
+3. Add parallel upload support for performance
+4. Add compression support for efficiency
 
-**Current workaround**: Tool creates snapshots and metadata structure, but doesn't upload actual block data.
+**Current status**: Tool creates snapshots, uses CBT gRPC APIs to get block metadata, and uploads metadata structure. Block data reading is implemented but not integrated with upload workflow.
 
-**Estimated effort**: 6-8 hours for full implementation
+**Estimated effort**: 2-4 hours for full implementation
 
 ## 🔮 Future Enhancements
 
-- [ ] Complete gRPC client implementation
+- [ ] Complete block data upload to S3
 - [ ] Restore tool implementation
 - [ ] Block compression (gzip, zstd)
 - [ ] Encryption at rest
@@ -336,8 +338,10 @@ For questions or issues:
 
 ---
 
-**Status**: ✅ **Functionally Complete**
-**Last Updated**: 2025-10-14
-**Implementation Progress**: 85% (15% is gRPC client details)
+**Status**: ✅ **Functionally Complete** (Metadata Operations)
+**Last Updated**: 2025-10-24
+**Implementation Progress**: 90% (10% is block data upload optimization)
 
 🎉 **The demo is ready to use and showcase Kubernetes CBT concepts!**
+
+**Note**: The backup tool successfully demonstrates CBT APIs (GetMetadataAllocated, GetMetadataDelta) and creates complete snapshot metadata. Block data upload is the only remaining feature for production use.

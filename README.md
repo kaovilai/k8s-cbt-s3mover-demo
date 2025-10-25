@@ -186,10 +186,12 @@ This creates:
    EOF
    ```
 
-2. **Backup snapshot 1** (TODO: Implement backup tool)
+2. **Backup snapshot 1**
    ```bash
-   # This will upload all allocated blocks
-   ./tools/cbt-backup/cbt-backup create --pvc postgres-data-postgres-0 \
+   # This creates snapshot and uploads metadata (CBT APIs functional)
+   cd tools/cbt-backup
+   go build -o cbt-backup ./cmd
+   ./cbt-backup create --pvc postgres-data-postgres-0 \
      --snapshot postgres-snapshot-1
    ```
 
@@ -219,8 +221,9 @@ This creates:
 
 5. **Incremental backup** (only changed blocks)
    ```bash
-   # This will use GetMetadataDelta() to find changed blocks
-   ./tools/cbt-backup/cbt-backup create --pvc postgres-data-postgres-0 \
+   # This uses GetMetadataDelta() to find changed blocks
+   cd tools/cbt-backup
+   ./cbt-backup create --pvc postgres-data-postgres-0 \
      --snapshot postgres-snapshot-2 \
      --base-snapshot postgres-snapshot-1
    ```
@@ -233,24 +236,45 @@ This creates:
 
 7. **Restore from backups**
    ```bash
-   # TODO: Implement restore tool
-   ./tools/cbt-restore/cbt-restore restore --pvc postgres-data \
-     --snapshots postgres-snapshot-1,postgres-snapshot-2
+   # ⚠️ Restore tool not yet implemented - see STATUS.md
+   # Planned usage:
+   # ./tools/cbt-restore/cbt-restore restore --pvc postgres-data \
+   #   --snapshots postgres-snapshot-1,postgres-snapshot-2
+
+   # Current workaround: Restore from VolumeSnapshot directly
+   kubectl apply -f - <<EOF
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: postgres-data-restored
+     namespace: cbt-demo
+   spec:
+     dataSource:
+       name: postgres-snapshot-2
+       kind: VolumeSnapshot
+       apiGroup: snapshot.storage.k8s.io
+     accessModes:
+       - ReadWriteOnce
+     volumeMode: Block
+     resources:
+       requests:
+         storage: 2Gi
+     storageClassName: csi-hostpath-sc
+   EOF
    ```
 
 ## 🔧 Tools
 
 ### Backup Tool (`cbt-backup`)
 
-**Status**: 🏗️ In Development
+**Status**: ✅ 90% Complete (Metadata Operations Functional)
 
 A Go-based tool that:
-- Creates Kubernetes VolumeSnapshots
-- Connects to CSI SnapshotMetadata gRPC service
-- Calls `GetMetadataDelta()` to identify changed blocks
-- Reads block data from PVC
-- Uploads only changed blocks to MinIO
-- Stores metadata for snapshot chain
+- ✅ Creates Kubernetes VolumeSnapshots
+- ✅ Connects to CSI SnapshotMetadata gRPC service
+- ✅ Calls `GetMetadataAllocated()` and `GetMetadataDelta()` to identify blocks
+- ✅ Stores complete metadata for snapshot chain in S3
+- ⚠️ Block data upload to S3 (TODO - metadata only currently)
 
 **Usage**:
 ```bash
@@ -275,14 +299,16 @@ snapshot retention policies.
 
 ### Restore Tool (`cbt-restore`)
 
-**Status**: 📝 Planned
+**Status**: 📝 Not Yet Implemented (0%)
 
-A Go-based tool that:
-- Lists available snapshots from MinIO
-- Downloads snapshot metadata
-- Creates new PVC (block mode)
-- Reconstructs volume by applying blocks in order
-- Verifies data integrity with checksums
+**Planned features**:
+- List available snapshots from MinIO
+- Download snapshot metadata
+- Create new PVC (block mode)
+- Reconstruct volume by applying blocks in order
+- Verify data integrity with checksums
+
+**Note**: This tool is not yet implemented. See `/workspace/STATUS.md` for current progress.
 
 ## 📊 Verifying CBT is Working
 
@@ -520,13 +546,12 @@ This removes:
 
 ## 🔮 Future Enhancements
 
-- [ ] Implement backup tool with real CBT API calls
+- [ ] Complete block data upload in backup tool (metadata operations functional)
 - [ ] Implement restore tool
 - [ ] Add data compression
 - [ ] Add encryption at rest
 - [ ] Parallel block uploads
 - [ ] Deduplication across snapshots
-- [ ] GitHub Actions CI/CD workflow
 - [ ] Support for multiple volumes
 - [ ] Integration with Velero
 - [ ] Prometheus metrics
@@ -545,4 +570,11 @@ For questions or issues, please open a GitHub issue.
 
 ---
 
-**Status**: 🏗️ Work in Progress - Core infrastructure complete, backup/restore tools in development
+**Status**: 🏗️ Work in Progress - Infrastructure complete, backup tool 90% complete (CBT APIs functional), restore tool pending
+
+**Current Capabilities**:
+- ✅ Full CBT infrastructure with CSI hostpath driver
+- ✅ Backup tool with working CBT gRPC APIs (GetMetadataAllocated, GetMetadataDelta)
+- ✅ Snapshot metadata operations and S3 storage
+- ⚠️ Block data upload (TODO)
+- ⚠️ Restore tool (TODO)
