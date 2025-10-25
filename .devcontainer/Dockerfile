@@ -31,6 +31,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /usr/local/share/npm-global && \
   chown -R node:node /usr/local/share
 
+# Install Go
+ARG GO_VERSION=1.24.5
+RUN wget -O go.tar.gz "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" && \
+  tar -C /usr/local -xzf go.tar.gz && \
+  rm go.tar.gz
+
+# Set up Go environment
+ENV GOROOT=/usr/local/go
+ENV GOPATH=/home/node/go
+ENV PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+
 ARG USERNAME=node
 
 # Persist bash history.
@@ -57,6 +68,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Set up non-root user
 USER node
 
+# Create Go workspace directory
+RUN mkdir -p $GOPATH/bin $GOPATH/src $GOPATH/pkg
+
 # Install global packages
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
@@ -81,6 +95,11 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # Copy custom ZSH configuration with aliases
 COPY --chown=node:node .zshrc /home/node/.zshrc.devcontainer
 RUN echo "source /home/node/.zshrc.devcontainer" >> /home/node/.zshrc
+
+# Install Go development tools
+RUN go install golang.org/x/tools/gopls@latest && \
+  go install github.com/go-delve/delve/cmd/dlv@latest && \
+  go install honnef.co/go/tools/cmd/staticcheck@latest
 
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}

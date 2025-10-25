@@ -19,7 +19,9 @@
         "anthropic.claude-code",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "eamodio.gitlens"
+        "eamodio.gitlens",
+        "antfu.slidev",
+        "golang.go"
       ],
       "settings": {
         "editor.formatOnSave": true,
@@ -53,7 +55,14 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
-  "postCreateCommand": "test -f /home/node/.claude/.claude.json || cp /workspace/.devcontainer/.claude.json /home/node/.claude/.claude.json",
+  "postCreateCommand": "test -f /home/node/.claude/.claude.json || cp /workspace/.devcontainer/.claude.json /home/node/.claude/.claude.json && cd /workspace/demo && npm install",
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
-  "waitFor": "postStartCommand"
+  "waitFor": "postStartCommand",
+  "forwardPorts": [3030],
+  "portsAttributes": {
+    "3030": {
+      "label": "Slidev",
+      "onAutoForward": "notify"
+    }
+  }
 }
