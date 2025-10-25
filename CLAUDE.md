@@ -270,6 +270,40 @@ The backup tool interacts with Kubernetes via:
 - [Kubernetes Blog: CBT Alpha Announcement](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
 - [CSI Spec - SnapshotMetadata](https://github.com/container-storage-interface/spec/blob/master/spec.md)
 
+## Claude Code Workflow Best Practices
+
+### GitHub Actions Commands
+
+**`gh run watch` behavior:**
+When `gh run watch` exits cleanly (exit code 0), the run has already completed successfully. **No need to sleep and check status again** - the command blocks until the run finishes.
+
+```bash
+# This already waits for completion and exits when done
+gh run watch 18798961487 --exit-status
+
+# ✗ WRONG: Don't do this after gh run watch succeeds
+sleep 180 && gh run view 18798961487
+
+# ✓ CORRECT: Just check the logs or details directly
+gh run view 18798961487 --log
+gh run view 18798961487 --job=<job-id> --log
+```
+
+### Git Commit Practices
+
+**Use specific file paths, not `git add -A`:**
+Multiple agents may be working simultaneously and committing. Use specific file paths to avoid staging other agents' changes:
+
+```bash
+# ✗ WRONG: Adds all files including other agents' changes
+git add -A
+
+# ✓ CORRECT: Add specific files only
+git add manifests/snapshot-metadata-lister/rbac.yaml
+git add .github/workflows/demo.yaml
+git add tools/cbt-backup/pkg/metadata/cbt_client.go
+```
+
 ## Project Status Summary
 
 See STATUS.md for detailed tracking, but key points:
