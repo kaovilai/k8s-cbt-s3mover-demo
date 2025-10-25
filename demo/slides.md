@@ -26,7 +26,7 @@ Efficient Backup with Changed Block Tracking
 
 ---
 transition: fade-out
-layout: two-cols
+layout: full
 ---
 
 # Overview
@@ -37,10 +37,16 @@ layout: two-cols
 
 Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
 
+<div class="text-sm">
+
 **Alpha support** announced in Kubernetes for CSI storage drivers
 
-</v-click>
+</div>
 
+</v-click>
+<table>
+<tr>
+<td>
 <v-click>
 
 ## Key Benefits
@@ -49,9 +55,7 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 - 📉 **Reduced Resource Usage** - Less network bandwidth and I/O
 - 💰 **Lower Storage Costs** - Avoid redundant full backups
 - 🔄 **Incremental Backups** - Only transfer changed blocks
-
 </v-click>
-
 <v-click>
 
 <div class="text-sm mt-4 p-2 bg-yellow-900 bg-opacity-20 rounded">
@@ -61,12 +65,12 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 </div>
 
 </v-click>
-
-::right::
+</td>
+<td>
 
 <v-click>
 
-```mermaid {scale: 0.7}
+```mermaid {scale:0.5}
 graph TB
     PVC[PVC: PostgreSQL Data]
     S1[Snapshot 1<br/>100 rows]
@@ -85,6 +89,10 @@ graph TB
 ```
 
 </v-click>
+
+</td>
+</tr>
+</table>
 
 ---
 layout: default
@@ -154,7 +162,7 @@ layout: default
 
 # Demo Architecture
 
-<div grid="~ cols-2 gap-4" class="text-xs">
+<div grid="~ cols-2 gap-0" class="text-xs">
 <div>
 
 ## Components
