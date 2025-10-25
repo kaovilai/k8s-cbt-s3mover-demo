@@ -38,7 +38,7 @@ if kubectl get pod -n "$NAMESPACE" -l app=postgres &> /dev/null; then
             echo "Verifying data checksums (sampling)..."
             CHECKSUM_ERRORS=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c \
                 "SELECT COUNT(*) FROM demo_data
-                 WHERE checksum != md5(data_block::text || content)
+                 WHERE checksum != md5(content)
                  LIMIT 100;" 2>/dev/null | tr -d ' ')
 
             if [ "$CHECKSUM_ERRORS" == "0" ]; then
@@ -86,8 +86,9 @@ STORAGECLASS:.spec.storageClassName,\
 MODE:.spec.volumeMode
 
 # Verify PVC is bound and using block mode
-PVC_STATUS=$(kubectl get pvc -n "$NAMESPACE" -o jsonpath='{.items[0].status.phase}')
-VOLUME_MODE=$(kubectl get pvc -n "$NAMESPACE" -o jsonpath='{.items[0].spec.volumeMode}')
+# Get the postgres PVC specifically (not the first PVC which might be minio)
+PVC_STATUS=$(kubectl get pvc -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].status.phase}')
+VOLUME_MODE=$(kubectl get pvc -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].spec.volumeMode}')
 
 if [ "$PVC_STATUS" == "Bound" ]; then
     echo ""
