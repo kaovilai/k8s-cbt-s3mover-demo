@@ -350,19 +350,23 @@ Total: 3.4GB uploaded
 
 ### With Changed Block Tracking
 ```
-Snapshot 1: Upload 1GB (full)
+Snapshot 1: GetMetadataAllocated() → Upload 500MB (only allocated blocks, not empty space)
 Snapshot 2: GetMetadataDelta() → Upload 100MB (only changes)
 Snapshot 3: GetMetadataDelta() → Upload 200MB (only changes)
-Total: 1.3GB uploaded (saved 2.1GB!)
+Total: 800MB uploaded (saved 2.6GB!)
 ```
 
 ### CBT APIs
 
 ```go
 // Get all allocated blocks in a snapshot
+// Used for initial full backups - identifies data ranges that were targets of write operations
+// This avoids backing up empty/unallocated space, significantly reducing initial backup size
+// Example: 10GB volume with only 2GB written → backup only 2GB
 GetMetadataAllocated(snapshotID) → []BlockMetadata
 
 // Get changed blocks between two snapshots
+// Used for incremental backups - identifies only the blocks that changed between snapshots
 // NOTE: As of kubernetes-csi/external-snapshot-metadata PR #180 (merged Oct 2025):
 //   - baseSnapshotID is now the CSI snapshot handle (not the VolumeSnapshot name)
 //   - Get the CSI handle from VolumeSnapshotContent.Status.SnapshotHandle

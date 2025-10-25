@@ -5,9 +5,11 @@ go 1.23.0
 toolchain go1.24.5
 
 require (
+	github.com/container-storage-interface/spec v1.11.0
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.2.0
 	github.com/minio/minio-go/v7 v7.0.82
 	github.com/spf13/cobra v1.8.1
+	google.golang.org/grpc v1.70.0
 	k8s.io/api v0.31.3
 	k8s.io/apimachinery v0.31.3
 	k8s.io/client-go v0.31.3
