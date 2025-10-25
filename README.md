@@ -10,14 +10,13 @@ This demo showcases:
 - ✅ **Incremental backups** - only changed blocks are uploaded
 - ✅ **S3-compatible storage** using MinIO
 - ✅ **Disaster recovery** - restore from incremental snapshots
-- ✅ **Kind cluster** for fast local testing
+- ✅ **Local testing** with Minikube or cloud clusters
 
 ## 📋 Prerequisites
 
-- [Kind](https://kind.sigs.k8s.io/) v0.20.0 or later
+- [Minikube](https://minikube.sigs.k8s.io/) or a cloud Kubernetes cluster
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.28.0 or later
 - [Go](https://golang.org/) 1.22 or later (for building tools)
-- Docker (for Kind)
 - ~10GB free disk space
 
 **CBT Support**: Changed Block Tracking API is available as an alpha feature starting in **Kubernetes 1.33**. For full CBT functionality, use Kubernetes 1.33 or later.
@@ -26,7 +25,7 @@ This demo showcases:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   Kind Cluster                           │
+│                Kubernetes Cluster                        │
 │                                                           │
 │  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐ │
 │  │  PostgreSQL  │  │   MinIO S3    │  │  CSI Driver  │ │
@@ -50,52 +49,34 @@ This demo showcases:
 
 ## 🚀 Quick Start
 
-Choose your local setup based on your needs:
+⚠️ **Note**: Kind is not supported for this demo due to limited block device support, which is required for CBT functionality. Use Minikube for local testing or a cloud Kubernetes cluster for production validation.
 
-| Approach | Best For | Block PVCs | Setup Time | Resources |
-|----------|----------|------------|------------|-----------|
-| **Kind** | Fast development, learning | ❌ Limited | ~2 min | Low |
-| **Minikube** | Full CBT testing | ✅ Full support | ~5 min | Medium |
-| **Cloud (EKS)** | Production validation | ✅ Full support | ~15 min | High ($$) |
-
-### Option A: Local Setup (macOS/Linux)
-
-#### Quick Start with Kind (Fast, Lightweight)
-
-```bash
-# Run the complete demo - Kind cluster (filesystem mode)
-./scripts/run-local-macos.sh
-```
-
-**Best for**: Fast iteration, learning, conceptual demos
-**Block devices**: ⚠️ Limited (filesystem PVCs only)
-**Requirements**: Docker, `kind`, `kubectl`
-
-#### Full Testing with Minikube (Block Device Support)
+### Option A: Local Setup with Minikube (macOS/Linux)
 
 ```bash
 # Run with minikube - Full block device support
 ./scripts/run-local-minikube.sh
 ```
 
-**Best for**: Testing actual CBT metadata, block PVCs
-**Block devices**: ✅ Full support (VM-based)
-**Requirements**: Docker, `minikube`, `kubectl`
-**Note**: Same setup as upstream CI tests
+**Features**:
+- ✅ Full block device support (VM-based)
+- ✅ Testing actual CBT metadata
+- ✅ Same setup as upstream CI tests
 
-**What both scripts do**:
+**Requirements**: Docker, `minikube`, `kubectl`
+
+**Install prerequisites** (macOS):
+```bash
+brew install minikube kubectl
+```
+
+**What the script does**:
 1. ✅ Check prerequisites
 2. ✅ Create Kubernetes cluster
 3. ✅ Deploy MinIO S3 storage
 4. ✅ Deploy CSI driver with CBT support
 5. ✅ Deploy PostgreSQL workload
 6. ✅ Create snapshots demonstrating CBT workflow
-
-**Install prerequisites** (macOS):
-```bash
-brew install kind kubectl        # For Kind
-brew install minikube kubectl    # For Minikube
-```
 
 #### Manual Step-by-Step Setup
 
@@ -324,8 +305,6 @@ kubectl logs -n default -l app=csi-hostpathplugin -c hostpath | grep -i metadata
 k8s-cbt-s3mover-demo/
 ├── README.md                      # This file
 ├── PLAN.md                        # Detailed implementation plan
-├── cluster/
-│   └── kind-config.yaml           # Kind cluster configuration
 ├── manifests/
 │   ├── namespace.yaml
 │   ├── minio/                     # MinIO S3 storage
@@ -390,47 +369,13 @@ type BlockMetadata struct {
 
 ### Block Device Support
 
-**Status**: Block PVCs work with **minikube** and **cloud providers**, but have limitations with **Kind** in containerized environments.
+**Requirements**: This demo requires **block mode volumes** for Changed Block Tracking functionality.
 
-| Environment | Block PVC Support | Notes |
-|-------------|-------------------|-------|
-| ✅ **Minikube** | Full support | VM-based, used by upstream CI |
-| ✅ **EKS/GKE/AKS** | Full support | Production environments |
-| ⚠️ **Kind** | Limited | Filesystem mode only in containers |
-| ⚠️ **Codespaces** | Limited | Docker-based, same as Kind |
+**Supported Environments**:
+- ✅ **Minikube**: Full support (VM-based, used by upstream CI)
+- ✅ **EKS/GKE/AKS**: Full support (production environments)
 
-**Why Kind Has Limitations**:
-
-The CSI hostpath driver requires privileged access to create loop devices using `losetup`. Kind runs Kubernetes nodes as Docker containers, which receive a **static copy** of the host's `/dev` directory at startup. Loop devices created after container startup are not visible, causing `losetup -f` to fail.
-
-**Symptom**:
-```
-failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
-```
-
-**Solutions**:
-
-1. **Use Minikube** for local testing with block PVCs:
-   ```bash
-   # Start minikube
-   minikube start
-
-   # Deploy demo
-   ./scripts/02-deploy-csi-driver.sh
-   ```
-
-2. **Use cloud providers** (recommended for full testing):
-   - See [Quick Start Option B](#option-b-remote-cluster-recommended-for-block-volumes)
-   - See [AWS EKS workflow](#option-2-automated-eks-cluster-aws)
-
-3. **Keep using Kind** with filesystem mode for conceptual demos:
-   - Our demo works with filesystem PVCs
-   - Shows snapshot workflow (even if not true block-level CBT)
-   - Faster for local development
-
-**Comparison**: See [docs/MINIKUBE_VS_KIND.md](docs/MINIKUBE_VS_KIND.md) for detailed comparison.
-
-**Upstream Reference**: The [kubernetes-csi/external-snapshot-metadata](https://github.com/kubernetes-csi/external-snapshot-metadata) project uses minikube for their integration tests specifically because it provides reliable block device support in CI.
+**Note**: Kind is not supported due to container-based limitations with loop device creation, which is required for block PVCs with the CSI hostpath driver.
 
 ### CBT API Availability
 
@@ -455,7 +400,7 @@ failed to attach device: makeLoopDevice failed: losetup -f failed: exit status 1
 ### GitHub Actions CI
 
 **Status**: CI workflow runs successfully with the following caveats:
-- Block device tests are skipped due to container limitations (Kind cluster mode)
+- Block device tests require Minikube or cloud clusters
 - Full CBT metadata API tests are skipped pending CRD availability
 - Basic snapshot and MinIO integration tests pass
 
@@ -510,7 +455,7 @@ Use the dedicated AWS workflow to automatically create and test on EKS:
 - ⚠️ Ensure the cluster has sufficient resources and CSI support
 
 See workflows:
-- [demo.yaml](.github/workflows/demo.yaml) - Local Kind + BYOC support
+- [demo.yaml](.github/workflows/demo.yaml) - BYOC support
 - [demo-aws.yaml](.github/workflows/demo-aws.yaml) - Automated EKS testing
 
 ## 🐛 Troubleshooting
@@ -545,18 +490,6 @@ kubectl run -it --rm debug --image=minio/mc --restart=Never -- \
 ```
 
 ## 🧹 Cleanup
-
-### Kind Cluster
-
-```bash
-# Delete Kind cluster and resources
-./scripts/cleanup.sh
-```
-
-This removes:
-- Kind cluster
-- Temporary directories
-- Downloaded CSI driver repository
 
 ### Minikube Cluster
 
