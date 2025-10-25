@@ -90,16 +90,16 @@ The CSI drivers work with snapshot handles internally. This API change makes the
 The snapshot-metadata-lister and snapshot-metadata-verifier tools now support both approaches:
 
 ```bash
-# Traditional approach (using VolumeSnapshot name)
+# Before PR #180 - Using VolumeSnapshot name
 snapshot-metadata-lister -p snap-1 -s snap-2 -n default
 
-# New approach (using CSI snapshot handle) - PREFERRED
+# After PR #180 - Using CSI snapshot handle (PREFERRED)
 snapshot-metadata-lister -P "csi-handle-abc123" -s snap-2 -n default
 ```
 
 **Flags**:
-- `-p, --previous-snapshot`: VolumeSnapshot object name (backward compatible)
-- `-P, --previous-snapshot-id`: CSI snapshot handle (new, preferred)
+- `-p, --previous-snapshot`: VolumeSnapshot object name (before PR #180)
+- `-P, --previous-snapshot-id`: CSI snapshot handle (after PR #180, preferred)
 
 If both are specified, `-P` (CSI handle) takes precedence.
 
@@ -110,7 +110,7 @@ If both are specified, `-P` (CSI handle) takes precedence.
 Both `.github/workflows/demo-aws.yaml` and `.github/workflows/demo.yaml` were updated to:
 - Create two snapshots for delta testing
 - Demonstrate how to extract the CSI snapshot handle
-- Document both the old and new approaches
+- Document both the before and after PR #180 approaches
 - Explain the benefits of the CSI handle approach
 
 ### 2. Backup Tool Documentation Updated
@@ -125,7 +125,7 @@ Both `.github/workflows/demo-aws.yaml` and `.github/workflows/demo.yaml` were up
 
 `README.md`:
 - Added API Change History section
-- Documented the new approach in the CBT APIs section
+- Documented the after PR #180 approach in the CBT APIs section
 - Added implementation notes to the Backup Tool section
 - Explained the benefits for snapshot retention policies
 
@@ -201,13 +201,13 @@ The workflow files now demonstrate:
 3. Creating the second snapshot (with changes)
 4. Extracting CSI snapshot handles
 5. Documenting how both approaches would work
-6. Explaining the advantages of the new approach
+6. Explaining the advantages of the after PR #180 approach
 
 **Important**: To properly test Changed Block Tracking, you must modify data between snapshots. The workflows insert 100 additional rows (~10MB) of data between snapshot-1 and snapshot-2, so that `GetMetadataDelta` has actual changed blocks to report.
 
 When the snapshot-metadata-lister/verifier tools become available, they should be tested with both:
-- `-p postgres-snapshot-1 -s postgres-snapshot-2` (backward compatibility using snapshot names)
-- `-P <csi-handle> -s postgres-snapshot-2` (preferred approach using CSI handle)
+- `-p postgres-snapshot-1 -s postgres-snapshot-2` (before PR #180, using snapshot names)
+- `-P <csi-handle> -s postgres-snapshot-2` (after PR #180, using CSI handle - preferred)
 
 The tools should report the changed blocks corresponding to the data written between the two snapshots.
 
