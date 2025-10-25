@@ -284,7 +284,7 @@ layout: default
 
 <v-clicks depth="2">
 
-## Phase 3: GetMetadataAllocated Demo
+## Phase 3: CBT API Demonstration
 
 7. **Create First Snapshot**
    ```bash
@@ -292,19 +292,53 @@ layout: default
    kubectl wait volumesnapshot postgres-snapshot-1 \
      --for=jsonpath='{.status.readyToUse}'=true
    ```
+   Snapshot created in **~3.5s**
 
-8. **Demonstrate GetMetadataAllocated**
-   - Build the CBT backup tool
-   - Run backup with allocated-block tracking
-   - Upload only allocated blocks to S3
+8. **Deploy snapshot-metadata-lister**
+   ```bash
+   kubectl apply -f manifests/snapshot-metadata-lister/
+   kubectl wait --for=condition=Ready pod/csi-client -n cbt-demo
+   ```
 
-   **Expected Results** (with full CBT support):
-   - Volume Size: **2 Gi** (actual demo PVC)
-   - PostgreSQL Data: **~20 MB** (200 rows total)
-   - Allocated Blocks: Only blocks with data
-   - **Savings: ~99%** (sparse regions skipped)
+9. **Call GetMetadataAllocated API**
+   ```bash
+   kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+     -s postgres-snapshot-1 -n cbt-demo
+   ```
+   Lists all **allocated blocks** in the snapshot
 
-   **Note**: Snapshot 1 created in ~3.5s
+</v-clicks>
+
+---
+
+# Demo Workflow (cont.)
+
+<v-clicks depth="2">
+
+## Phase 4: GetMetadataDelta Demonstration
+
+10. **Insert Additional Data**
+    ```sql
+    INSERT INTO demo_data ... -- 100 more rows (~10MB)
+    ```
+
+11. **Create Second Snapshot**
+    ```bash
+    kubectl apply -f postgres-snapshot-2.yaml
+    ```
+    Snapshot created in **~4.6s**
+
+12. **Call GetMetadataDelta API**
+    ```bash
+    # Using snapshot names
+    kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+      -p postgres-snapshot-1 -s postgres-snapshot-2 -n cbt-demo
+
+    # Using CSI handle (PR #180)
+    kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+      -P <snap-handle> -s postgres-snapshot-2 -n cbt-demo
+    ```
+    Reports only **changed blocks** between snapshots
 
 </v-clicks>
 
@@ -378,29 +412,45 @@ layout: default
 
 ## Full Snapshot Backup (GetMetadataAllocated)
 
-1. Create VolumeSnapshot
-2. Build backup tool: `go build -o cbt-backup ./cmd`
-3. Query `GetMetadataAllocated` for all allocated blocks
-4. Selectively read and backup only allocated blocks to S3
+**Workflow Demonstration** (Phase 3):
 
-**Workflow Demo Command:**
+1. Create VolumeSnapshot
+2. Deploy snapshot-metadata-lister pod
+3. Query `GetMetadataAllocated` API for all allocated blocks
+4. Returns list of blocks containing actual data
+
+**API Call in Workflow:**
 ```bash
-./cbt-backup create --namespace cbt-demo \
-  --pvc postgres-data-0 --snapshot postgres-snapshot-1 \
-  --s3-endpoint minio.cbt-demo.svc:9000 \
-  --s3-bucket snapshots
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -s postgres-snapshot-1 -n cbt-demo
 ```
 
-**Demo Setup**: 2Gi volume with ~20MB PostgreSQL data → **Skips sparse regions**
+**Demo Results**: 2Gi volume with ~20MB PostgreSQL data
+- Lists only allocated blocks
+- Skips sparse/empty regions
+- Enables efficient selective backup
 
 ## Incremental Snapshot Backup (GetMetadataDelta)
 
-1. Create new VolumeSnapshot
-2. Query `GetMetadataDelta` comparing to previous snapshot
-3. Mount snapshot with Block VolumeMode
-4. Backup only changed blocks (~10MB for 100 additional rows)
+**Workflow Demonstration** (Phase 4):
 
-**Benefits**: Only transfer changed blocks between snapshots
+1. Insert 100 additional rows (~10MB data)
+2. Create postgres-snapshot-2
+3. Query `GetMetadataDelta` comparing snapshots
+4. Returns only changed blocks
+
+**API Calls in Workflow:**
+```bash
+# Using snapshot names
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -p postgres-snapshot-1 -s postgres-snapshot-2 -n cbt-demo
+
+# Using CSI handle (PR #180 enhancement)
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -P <snap-handle> -s postgres-snapshot-2 -n cbt-demo
+```
+
+**Benefits**: Only transfer changed blocks (~10MB delta)
 
 </v-clicks>
 
@@ -418,57 +468,60 @@ Note: CBT API is currently in alpha and subject to change
 
 <v-clicks depth="2">
 
-## 1. GetMetadataAllocated - Workflow Integration
+## 1. GetMetadataAllocated - Live API Call
 
-**When**: After creating postgres-snapshot-1 (Phase 3 of demo workflow)
+**Workflow Step**: Phase 3 - After creating postgres-snapshot-1
 
-**Purpose**: Identify and upload only allocated blocks, skipping empty space
-
-**Backup Tool Usage** (from workflow):
+**Deployment**:
 ```bash
-./tools/cbt-backup/cbt-backup create \
-  --namespace cbt-demo --pvc postgres-data-0 \
-  --snapshot postgres-snapshot-1 \
-  --s3-endpoint minio.cbt-demo.svc.cluster.local:9000 \
-  --s3-access-key minioadmin --s3-secret-key minioadmin123 \
-  --s3-bucket snapshots --snapshot-class csi-hostpath-snapclass
+# Deploy snapshot-metadata-lister pod with RBAC
+kubectl apply -f manifests/snapshot-metadata-lister/
 ```
 
-**Note**: May fall back to metadata-only if CSI socket not accessible
+**API Call** (actual command from workflow):
+```bash
+kubectl exec -n cbt-demo csi-client -- \
+  /tools/snapshot-metadata-lister \
+  -s postgres-snapshot-1 \
+  -n cbt-demo
+```
 
-**Expected Behavior with Full CBT Support**:
-- Volume Size: 10 GB (total PVC size)
-- Allocated Blocks: ~1 MB (actual PostgreSQL data)
-- Data Transferred: ~1 MB (only allocated blocks)
-- **Savings: 9.999 GB (99.99%)**
+**What it does**:
+- Queries SnapshotMetadataService via gRPC
+- Returns list of all allocated blocks
+- Skips sparse/empty regions
+- **Volume Size**: 2Gi → **Allocated blocks only**
 
-## 2. GetMetadataDelta - Before PR #180
+## 2. GetMetadataDelta - Using Snapshot Names
 
-Using snapshot names:
+**Workflow Step**: Phase 4 - After creating postgres-snapshot-2
 
 ```bash
-snapshot-metadata-lister \
+kubectl exec -n cbt-demo csi-client -- \
+  /tools/snapshot-metadata-lister \
   -p postgres-snapshot-1 \
   -s postgres-snapshot-2 \
   -n cbt-demo
 ```
 
-## 2. GetMetadataDelta - After PR #180
+## 3. GetMetadataDelta - Using CSI Handle (PR #180)
 
-**Enhancement: PR #180** added CSI handle support
+**Enhancement**: Allows base snapshot deletion after getting handle
 
 ```bash
-# Get CSI snapshot handle
+# Get CSI snapshot handle from VolumeSnapshotContent
 VSC=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo \
   -o jsonpath="{.status.boundVolumeSnapshotContentName}")
 HANDLE=$(kubectl get volumesnapshotcontent $VSC \
   -o jsonpath="{.status.snapshotHandle}")
 
-# Use CSI handle (allows base snapshot deletion)
-snapshot-metadata-lister -P "$HANDLE" -s postgres-snapshot-2 -n cbt-demo
+# Call API with CSI handle instead of snapshot name
+kubectl exec -n cbt-demo csi-client -- \
+  /tools/snapshot-metadata-lister \
+  -P "$HANDLE" -s postgres-snapshot-2 -n cbt-demo
 ```
 
-Reports only changed blocks (100 new rows, ~10MB)
+Reports **only changed blocks** (100 new rows, ~10MB)
 
 </v-clicks>
 
@@ -482,38 +535,37 @@ layout: two-cols
 
 <v-click>
 
-## Backup Tool
+## Backup Tool (cbt-backup)
 
-**Built and executed in demo workflow** (Phase 3):
+**Built in CI** (build-backup-tool job → artifact):
 
 ```bash
-# Build (from workflow)
 cd tools/cbt-backup
 go mod tidy
 go build -v -o cbt-backup ./cmd
-cd ../..
-
-# Execute with GetMetadataAllocated
-./tools/cbt-backup/cbt-backup create \
-  --namespace cbt-demo \
-  --pvc postgres-data-0 \
-  --snapshot postgres-snapshot-1 \
-  --s3-endpoint minio.cbt-demo.svc.cluster.local:9000 \
-  --s3-access-key minioadmin \
-  --s3-secret-key minioadmin123 \
-  --s3-bucket snapshots \
-  --snapshot-class csi-hostpath-snapclass
 ```
+
+**Purpose**: Production backup use case
+- Integrates CBT APIs for efficient backups
+- Uploads to S3-compatible storage
+- Supports incremental backups
+
+**Status**: Built and tested in CI, available as artifact
 
 </v-click>
 
 <v-click>
 
-**Features:**
-- GetMetadataAllocated API integration
-- Upload only allocated blocks to S3
-- S3-compatible storage support
-- Automatic fallback if CSI socket unavailable
+## Demo Tool (snapshot-metadata-lister)
+
+**Official kubernetes-csi tool** for CBT API demonstration:
+
+```bash
+# Deployed in csi-client pod
+kubectl exec csi-client -- /tools/snapshot-metadata-lister
+```
+
+**Used in workflow** to actually call GetMetadataAllocated and GetMetadataDelta APIs
 
 </v-click>
 
