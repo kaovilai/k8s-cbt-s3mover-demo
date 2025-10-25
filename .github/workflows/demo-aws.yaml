@@ -256,10 +256,10 @@ jobs:
           # Build the backup tool
           echo "Building CBT backup tool..."
           cd tools/cbt-backup
-          go mod download || {
-            echo "Retrying dependency download..."
+          go mod tidy || {
+            echo "Retrying go mod tidy..."
             sleep 2
-            go mod download
+            go mod tidy
           }
           go build -v -o cbt-backup ./cmd
           cd ../..

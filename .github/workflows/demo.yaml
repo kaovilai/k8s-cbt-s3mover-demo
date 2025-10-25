@@ -229,10 +229,10 @@ jobs:
           # Build the backup tool
           echo "Building CBT backup tool..."
           cd tools/cbt-backup
-          go mod download || {
-            echo "Retrying dependency download..."
+          go mod tidy || {
+            echo "Retrying go mod tidy..."
             sleep 2
-            go mod download
+            go mod tidy
           }
           go build -v -o cbt-backup ./cmd
           cd ../..
@@ -467,14 +467,14 @@ jobs:
       - name: Download dependencies
         working-directory: tools/cbt-backup
         run: |
-          echo "Downloading Go dependencies..."
-          go mod download
+          echo "Downloading Go dependencies and updating go.sum..."
+          go mod tidy
 
           # Retry on failure (network issues)
           if [ $? -ne 0 ]; then
             echo "First attempt failed, retrying..."
             sleep 5
-            go mod download
+            go mod tidy
           fi
 
       - name: Build backup tool
