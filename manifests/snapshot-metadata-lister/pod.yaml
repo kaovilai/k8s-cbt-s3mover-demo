@@ -12,8 +12,10 @@ spec:
     - /bin/sh
     - -c
     - |
-      go install github.com/kubernetes-csi/external-snapshot-metadata/examples/snapshot-metadata-lister@main
-      cp $(go env GOPATH)/bin/snapshot-metadata-lister /output
+      apt-get update && apt-get install -y git
+      git clone https://github.com/kubernetes-csi/external-snapshot-metadata.git /tmp/repo
+      cd /tmp/repo/examples/snapshot-metadata-lister
+      go build -o /output/snapshot-metadata-lister .
     volumeMounts:
     - name: shared-volume
       mountPath: /output
