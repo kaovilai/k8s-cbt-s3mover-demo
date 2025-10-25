@@ -378,20 +378,9 @@ jobs:
           }
 
           echo ""
-          echo "Testing GetMetadataDelta with CSI handle (PR #180)..."
-          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
-            -P "$SNAP_HANDLE" \
-            -s postgres-snapshot-2 \
-            -n cbt-demo || {
-            echo ""
-            echo "⚠ GetMetadataDelta with CSI handle failed"
-            echo "  This may happen if:"
-            echo "  1. The CSI driver doesn't implement GetMetadataDelta"
-            echo "  2. The SnapshotMetadataService is not available"
-            echo "  3. PR #180 changes are not yet in the deployed version"
-            echo ""
-          }
-
+          echo "Note: PR #180 (CSI handle support for GetMetadataDelta) is not yet"
+          echo "released in snapshot-metadata-lister. Once available, you could use:"
+          echo "  snapshot-metadata-lister -P '$SNAP_HANDLE' -s postgres-snapshot-2 -n cbt-demo"
           echo ""
           echo "Snapshot details:"
           kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o yaml
