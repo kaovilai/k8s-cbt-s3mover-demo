@@ -129,6 +129,22 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
+      - name: Deploy Snapshot Controller
+        run: |
+          echo "Deploying Snapshot Controller..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+
+          echo "Waiting for snapshot-controller to be ready..."
+          kubectl wait --for=condition=Available deployment/snapshot-controller -n kube-system --timeout=60s || {
+            echo "Warning: snapshot-controller deployment not available, checking pods..."
+            kubectl get pods -n kube-system -l app.kubernetes.io/name=snapshot-controller
+            kubectl get deployment -n kube-system snapshot-controller
+          }
+
+          echo "✓ Snapshot Controller deployed"
+          kubectl get pods -n kube-system -l app.kubernetes.io/name=snapshot-controller
+
       - name: Deploy CSI Driver with CBT
         run: |
           echo "Deploying CSI hostpath driver with Changed Block Tracking..."
@@ -324,6 +340,13 @@ jobs:
           echo ""
           echo "SnapshotMetadataServices:"
           kubectl get snapshotmetadataservices -A || echo "CRD not installed"
+
+          echo ""
+          echo "========================================"
+          echo "Snapshot Controller Logs:"
+          echo "========================================"
+          kubectl logs -n kube-system -l app.kubernetes.io/name=snapshot-controller --tail=100 || true
+          kubectl describe deployment -n kube-system snapshot-controller || true
 
           echo ""
           echo "========================================"
