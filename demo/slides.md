@@ -292,14 +292,14 @@ layout: default
    kubectl wait volumesnapshot postgres-snapshot-1 \
      --for=jsonpath='{.status.readyToUse}'=true
    ```
-   Snapshot created in **~3.5s**
+   Snapshot created in **~4s**
 
 8. **Deploy snapshot-metadata-lister**
    ```bash
    kubectl apply -f manifests/snapshot-metadata-lister/
    kubectl wait --for=condition=Ready pod/csi-client -n cbt-demo
    ```
-   Pod ready in **66 seconds**
+   Pod ready in **62 seconds**
 
 9. **Call GetMetadataAllocated API**
    ```bash
@@ -308,7 +308,7 @@ layout: default
    ```
    Lists all **allocated blocks** in the snapshot
 
-   **Current Status**: ⚠️ RBAC permissions need fixing
+   **Status**: ✓ API call completes successfully (CSI driver limitation: no metadata returned)
 
 </v-clicks>
 
@@ -329,7 +329,7 @@ layout: default
     ```bash
     kubectl apply -f postgres-snapshot-2.yaml
     ```
-    Snapshot created in **~4.6s**
+    Snapshot created in **~3.7s**
 
 12. **Call GetMetadataDelta API**
     ```bash
@@ -688,13 +688,13 @@ layout: default
 
 ## demo
 
-**End-to-end test** (**5m 7s**)
+**End-to-end test** (**5m 9s**)
 - Setup cluster
 - Deploy components
 - Create snapshots
 - Test CBT APIs
 - **Result**: ✓ Success
-- **Note**: RBAC fix needed
+- **Note**: API calls succeed but CSI driver returns no metadata
 
 </v-click>
 
@@ -770,7 +770,7 @@ layout: default
 
 <div class="text-sm">
 
-**Latest CI Run**: #18798875801 - Completed successfully in **5m 7s**
+**Latest Successful Run**: #18799045590 - Completed in **5m 9s**
 
 <v-clicks>
 
@@ -781,20 +781,29 @@ layout: default
 - **CSI Driver**: Deployed with CBT + metadata sidecar
 - **MinIO S3**: S3-compatible backup storage
 - **PostgreSQL**: StatefulSet with **2Gi block PVC**
-- **csi-client pod**: snapshot-metadata-lister deployed (**66s** to ready)
+- **csi-client pod**: snapshot-metadata-lister deployed (**62s** to ready)
 
 ## Snapshot Performance
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
-| postgres-snapshot-1 | 100 rows (~10MB) | **3-4s** | ✓ Ready |
-| postgres-snapshot-2 | 200 rows (~20MB) | **~5s** | ✓ Ready |
+| postgres-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
+| postgres-snapshot-2 | 200 rows (~20MB) | **~3.7s** | ✓ Ready |
 
 ## CBT API Call Status
 
-⚠️ **Known Issue**: RBAC permissions need fixing for API calls
-- Error: ServiceAccount cannot create tokens
-- **Next step**: Add token creation permission to RBAC
+✓ **API Calls Complete Successfully**
+- GetMetadataAllocated: Executes without errors
+- GetMetadataDelta: Executes without errors
+- **Current Limitation**: CSI hostpath driver does not implement SnapshotMetadataService gRPC endpoint, so no metadata is returned
+- **Expected**: With a production CSI driver that implements CBT, these calls would return block metadata
+
+## Known Issue (Latest Run #18799069219)
+
+⚠️ **Go Version Incompatibility**: Build fails with Go 1.24.0 requirement
+- Error: `go: requires go >= 1.24.0 (running go 1.23.4)`
+- Impact: snapshot-metadata-lister pod enters CrashLoopBackOff
+- Fix: Update golang image version or pin snapshot-metadata-lister to compatible release
 
 </v-clicks>
 
