@@ -299,6 +299,7 @@ layout: default
    kubectl apply -f manifests/snapshot-metadata-lister/
    kubectl wait --for=condition=Ready pod/csi-client -n cbt-demo
    ```
+   Pod ready in **66 seconds**
 
 9. **Call GetMetadataAllocated API**
    ```bash
@@ -306,6 +307,8 @@ layout: default
      -s postgres-snapshot-1 -n cbt-demo
    ```
    Lists all **allocated blocks** in the snapshot
+
+   **Current Status**: ⚠️ RBAC permissions need fixing
 
 </v-clicks>
 
@@ -508,6 +511,8 @@ kubectl exec -n cbt-demo csi-client -- \
 
 **Enhancement**: Allows base snapshot deletion after getting handle
 
+**Status**: ⚠️ PR #180 not yet merged into deployed version
+
 ```bash
 # Get CSI snapshot handle from VolumeSnapshotContent
 VSC=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo \
@@ -516,12 +521,13 @@ HANDLE=$(kubectl get volumesnapshotcontent $VSC \
   -o jsonpath="{.status.snapshotHandle}")
 
 # Call API with CSI handle instead of snapshot name
+# Flag -P not yet available in current snapshot-metadata-lister
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
   -P "$HANDLE" -s postgres-snapshot-2 -n cbt-demo
 ```
 
-Reports **only changed blocks** (100 new rows, ~10MB)
+Will report **only changed blocks** (100 new rows, ~10MB) when available
 
 </v-clicks>
 
@@ -682,12 +688,13 @@ layout: default
 
 ## demo
 
-**End-to-end test** (**5m 2s**)
+**End-to-end test** (**5m 7s**)
 - Setup cluster
 - Deploy components
 - Create snapshots
-- Test CBT
+- Test CBT APIs
 - **Result**: ✓ Success
+- **Note**: RBAC fix needed
 
 </v-click>
 
@@ -763,26 +770,31 @@ layout: default
 
 <div class="text-sm">
 
-**Latest CI Run**: Completed successfully in **5m 2s**
+**Latest CI Run**: #18798875801 - Completed successfully in **5m 7s**
 
 <v-clicks>
 
 ## Infrastructure Deployed
 
 - **Cluster**: Minikube (4 CPUs, 8GB RAM, containerd)
-- **Snapshot Controller**: Ready in 37s
+- **Snapshot Controller**: Ready in ~37s
 - **CSI Driver**: Deployed with CBT + metadata sidecar
 - **MinIO S3**: S3-compatible backup storage
 - **PostgreSQL**: StatefulSet with **2Gi block PVC**
+- **csi-client pod**: snapshot-metadata-lister deployed (**66s** to ready)
 
 ## Snapshot Performance
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
-| postgres-snapshot-1 | 100 rows (~10MB) | **3.5s** | ✓ Ready |
-| postgres-snapshot-2 | 200 rows (~20MB) | **4.6s** | ✓ Ready |
+| postgres-snapshot-1 | 100 rows (~10MB) | **3-4s** | ✓ Ready |
+| postgres-snapshot-2 | 200 rows (~20MB) | **~5s** | ✓ Ready |
 
-**Delta**: 100 additional rows inserted between snapshots
+## CBT API Call Status
+
+⚠️ **Known Issue**: RBAC permissions need fixing for API calls
+- Error: ServiceAccount cannot create tokens
+- **Next step**: Add token creation permission to RBAC
 
 </v-clicks>
 
