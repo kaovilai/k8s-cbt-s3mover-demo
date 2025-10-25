@@ -24,6 +24,7 @@ jobs:
   demo:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: [build-backup-tool, build-restore-tool, lint]
     env:
       USE_REMOTE_CLUSTER: ${{ secrets.KUBECONFIG != '' }}
 
@@ -35,6 +36,15 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+
+      - name: Download backup tool artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cbt-backup
+          path: tools/cbt-backup
+
+      - name: Make backup tool executable
+        run: chmod +x tools/cbt-backup/cbt-backup
 
       - name: Setup kubectl with remote cluster
         if: ${{ env.USE_REMOTE_CLUSTER == 'true' }}
@@ -224,19 +234,6 @@ jobs:
           # Get volume size from VolumeSnapshot
           VOLUME_SIZE=$(kubectl get volumesnapshot $SNAPSHOT_NAME -n cbt-demo -o jsonpath='{.status.restoreSize}')
           echo "Volume Size: $VOLUME_SIZE"
-          echo ""
-
-          # Build the backup tool
-          echo "Building CBT backup tool..."
-          cd tools/cbt-backup
-          go mod tidy || {
-            echo "Retrying go mod tidy..."
-            sleep 2
-            go mod tidy
-          }
-          go build -v -o cbt-backup ./cmd
-          cd ../..
-          echo "✓ Build successful"
           echo ""
 
           echo "=========================================="
@@ -472,6 +469,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache-dependency-path: tools/cbt-backup/go.sum
 
       - name: Download dependencies
         working-directory: tools/cbt-backup
@@ -508,6 +506,13 @@ jobs:
             echo "This is expected for a demo project"
             exit 0
           }
+
+      - name: Upload backup tool artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbt-backup
+          path: tools/cbt-backup/cbt-backup
+          retention-days: 1
 
   build-restore-tool:
     runs-on: ubuntu-latest
@@ -554,6 +559,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+          cache-dependency-path: tools/cbt-backup/go.sum
 
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@master
