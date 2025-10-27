@@ -17,8 +17,6 @@
 set -e
 set -x
 
-SCRIPT_DIR="$(dirname "${0}")"
-
 TEMP_DIR="$(mktemp -d)"
 
 # snapshot
