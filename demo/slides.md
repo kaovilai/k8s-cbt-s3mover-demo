@@ -409,7 +409,7 @@ spec:
 layout: default
 ---
 
-# Use Cases
+# Use Cases - Full Backup
 
 <v-clicks depth="2">
 
@@ -428,10 +428,15 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
   -s postgres-snapshot-1 -n cbt-demo
 ```
 
-**Demo Results**: 2Gi volume with ~20MB PostgreSQL data
-- Lists only allocated blocks
-- Skips sparse/empty regions
-- Enables efficient selective backup
+**Benefits**: Lists only allocated blocks, skips sparse regions
+
+</v-clicks>
+
+---
+
+# Use Cases - Incremental Backup
+
+<v-clicks depth="2">
 
 ## Incremental Snapshot Backup (GetMetadataDelta)
 
@@ -463,7 +468,7 @@ layout: default
 
 <div class="text-sm">
 
-# CBT API Demonstration
+# CBT API Demo - GetMetadataAllocated
 
 <div class="text-xs mb-2 opacity-70">
 Note: CBT API is currently in alpha and subject to change
@@ -471,7 +476,7 @@ Note: CBT API is currently in alpha and subject to change
 
 <v-clicks depth="2">
 
-## 1. GetMetadataAllocated - Live API Call
+## GetMetadataAllocated - Live API Call
 
 **Workflow Step**: Phase 3 - After creating postgres-snapshot-1
 
@@ -495,10 +500,29 @@ kubectl exec -n cbt-demo csi-client -- \
 - Skips sparse/empty regions
 - **Volume Size**: 2Gi → **Allocated blocks only**
 
-## 2. GetMetadataDelta - Using Snapshot Names
+</v-clicks>
+
+</div>
+
+---
+layout: default
+---
+
+<div class="text-sm">
+
+# CBT API Demo - GetMetadataDelta (Names)
+
+<div class="text-xs mb-2 opacity-70">
+Note: CBT API is currently in alpha and subject to change
+</div>
+
+<v-clicks depth="2">
+
+## GetMetadataDelta - Using Snapshot Names
 
 **Workflow Step**: Phase 4 - After creating postgres-snapshot-2
 
+**API Call**:
 ```bash
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
@@ -507,7 +531,30 @@ kubectl exec -n cbt-demo csi-client -- \
   -n cbt-demo
 ```
 
-## 3. GetMetadataDelta - Using CSI Handle (PR #180)
+**What it does**:
+- Compares two snapshots by name
+- Returns only changed blocks between snapshots
+- Reports delta: **~10MB** (100 new rows)
+
+</v-clicks>
+
+</div>
+
+---
+layout: default
+---
+
+<div class="text-sm">
+
+# CBT API Demo - GetMetadataDelta (Handle)
+
+<div class="text-xs mb-2 opacity-70">
+Note: CBT API is currently in alpha and subject to change
+</div>
+
+<v-clicks depth="2">
+
+## GetMetadataDelta - Using CSI Handle (PR #180)
 
 **Enhancement**: Allows base snapshot deletion after getting handle
 
@@ -766,7 +813,7 @@ on:
 layout: default
 ---
 
-# Actual Workflow Results
+# Actual Workflow Results - Infrastructure
 
 <div class="text-sm">
 
@@ -789,6 +836,20 @@ layout: default
 |----------|------|---------------|--------|
 | postgres-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
 | postgres-snapshot-2 | 200 rows (~20MB) | **~3.7s** | ✓ Ready |
+
+</v-clicks>
+
+</div>
+
+---
+layout: default
+---
+
+# Actual Workflow Results - API Status
+
+<div class="text-sm">
+
+<v-clicks>
 
 ## CBT API Call Status
 
