@@ -36,9 +36,16 @@ NAMESPACE="default"
 
 function create_or_delete_crds() {
     local action=$1
-    kubectl "${action}" -f "${SNAPSHOTCLASS}"
-    kubectl "${action}" -f "${VOLUME_SNAPSHOT_CONTENT}"
-    kubectl "${action}" -f "${VOLUME_SNAPSHOT}"
+    if [ "${action}" == "create" ]; then
+        # Use apply for idempotent operations
+        kubectl apply -f "${SNAPSHOTCLASS}"
+        kubectl apply -f "${VOLUME_SNAPSHOT_CONTENT}"
+        kubectl apply -f "${VOLUME_SNAPSHOT}"
+    else
+        kubectl "${action}" -f "${SNAPSHOTCLASS}"
+        kubectl "${action}" -f "${VOLUME_SNAPSHOT_CONTENT}"
+        kubectl "${action}" -f "${VOLUME_SNAPSHOT}"
+    fi
 }
 
 function create_or_delete_snapshot_controller() {
@@ -52,8 +59,14 @@ function create_or_delete_snapshot_controller() {
     sed -i "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_snap_controller}"
     sed -i -E "s/(image: registry\.k8s\.io\/sig-storage\/snapshot-controller:).*$/\1$SNAPSHOT_VERSION/g" "${temp_snap_controller}"
 
-    kubectl "${action}" -f "${temp_rbac}"
-    kubectl "${action}" -f "${temp_snap_controller}" -n "${NAMESPACE}"
+    if [ "${action}" == "create" ]; then
+        # Use apply for idempotent operations
+        kubectl apply -f "${temp_rbac}"
+        kubectl apply -f "${temp_snap_controller}" -n "${NAMESPACE}"
+    else
+        kubectl "${action}" -f "${temp_rbac}"
+        kubectl "${action}" -f "${temp_snap_controller}" -n "${NAMESPACE}"
+    fi
 
     if [ "${action}" == "delete" ]; then
         return 0
