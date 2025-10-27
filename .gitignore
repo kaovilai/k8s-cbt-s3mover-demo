@@ -58,3 +58,7 @@ coverage.txt
 
 # Downloaded CSI driver
 /tmp/csi-driver-host-path/
+
+# slide exports
+demo/slides-export
+demo/dist/
