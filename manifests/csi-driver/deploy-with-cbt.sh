@@ -118,19 +118,7 @@ HOSTPATHPLUGIN_TAG="canary" \
 echo "✓ CSI driver deployment initiated"
 
 echo ""
-echo "Step 6: Apply Testdata Manifests"
-echo "-----------------------------------"
-if [ -d "$SCRIPT_DIR/testdata" ]; then
-    echo "Applying testdata manifests..."
-    kubectl apply -f "$SCRIPT_DIR/testdata/"
-    echo "✓ Testdata manifests applied"
-else
-    echo "⚠ Warning: testdata directory not found at $SCRIPT_DIR/testdata"
-    echo "Snapshot metadata service may not be fully configured"
-fi
-
-echo ""
-echo "Step 7: Wait for CSI Driver Pods"
+echo "Step 6: Wait for CSI Driver Pods"
 echo "-----------------------------------"
 echo "Waiting for CSI driver pods to be created..."
 RETRIES=0
