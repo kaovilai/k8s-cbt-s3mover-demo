@@ -3,10 +3,17 @@
 ## ✅ Completed Components
 
 ### Infrastructure (100%)
-- [x] Kind cluster configuration with CBT-enabled feature gates
+- [x] Minikube cluster configuration (VM-based for proper block device support)
 - [x] MinIO deployment (StatefulSet, Service, PVC, Secret)
-- [x] CSI hostpath driver deployment script with `SNAPSHOT_METADATA_TESTS=true`
+- [x] CSI hostpath driver deployment following upstream pattern
+  - [x] Snapshot controller with VolumeSnapshot CRDs
+  - [x] TLS certificate generation for secure gRPC
+  - [x] SnapshotMetadataService CRD and CR
+  - [x] ClusterIP service for snapshot metadata (port 6443)
+  - [x] Environment variables matching upstream integration tests
+  - [x] Testdata manifests (`manifests/csi-driver/testdata/`)
 - [x] VolumeSnapshotClass configuration
+- [x] StorageClass configuration
 - [x] Namespace and resource organization
 
 ### Workload (100%)
@@ -16,7 +23,7 @@
 - [x] Proper volume configuration for CBT
 
 ### Automation Scripts (100%)
-- [x] `00-setup-cluster.sh` - Creates Kind cluster
+- [x] `00-setup-cluster.sh` - Creates Minikube cluster
 - [x] `00-setup-remote-cluster.sh` - Remote cluster setup
 - [x] `01-deploy-minio.sh` - Deploys MinIO S3 storage
 - [x] `02-deploy-csi-driver.sh` - Deploys CSI driver with CBT
@@ -30,6 +37,9 @@
 - [x] `run-demo-remote.sh` - Remote demo runner
 - [x] `run-local-minikube.sh` - Minikube setup
 - [x] `run-local-macos.sh` - macOS local setup
+- [x] `deploy-snapshot-controller.sh` - Upstream snapshot controller deployment
+- [x] `generate-csi-certs.sh` - TLS certificate generation for snapshot metadata
+- [x] `manifests/csi-driver/deploy-with-cbt.sh` - Main CSI driver deployment (upstream pattern)
 
 ### Operational Scripts (100%)
 - [x] `validate-cbt.sh` - Validates CBT configuration

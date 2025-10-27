@@ -1,0 +1,15 @@
+apiVersion: cbt.storage.k8s.io/v1alpha1
+kind: SnapshotMetadataService
+metadata:
+  name: hostpath.csi.k8s.io
+spec:
+  # Address of the snapshot metadata service (ClusterIP service)
+  address: csi-snapshot-metadata.default:6443
+
+  # Base64-encoded CA certificate for TLS verification
+  # This will be automatically updated by the deployment script with the generated CA cert
+  caCert: PLACEHOLDER_CA_CERT
+
+  # Optional: audience for token-based authentication
+  # Uncomment the line below if you want to enable audience-based auth
+  # audience: test-backup-client

@@ -164,9 +164,64 @@ Scripts are numbered for execution order:
 - `manifests/namespace.yaml`: cbt-demo namespace
 - `manifests/minio/`: MinIO StatefulSet, Service, PVC, Secret
 - `manifests/csi-driver/`: CSI hostpath driver with external-snapshot-metadata sidecar
+  - `deploy-with-cbt.sh`: Main deployment script following upstream pattern
+  - `testdata/`: Example manifests for snapshot metadata service
+    - `snapshotmetadataservice.yaml`: SnapshotMetadataService CR
+    - `csi-snapshot-metadata-service.yaml`: ClusterIP service for gRPC communication
+    - `csi-snapshot-metadata-tls-secret.yaml`: TLS secret template (created by script)
+  - `storage-class.yaml`: StorageClass for CSI hostpath driver
+  - `snapshot-class.yaml`: VolumeSnapshotClass for snapshots
 - `manifests/workload/`: PostgreSQL StatefulSet with block-mode PVC, data initialization job
 
 ## Important Implementation Details
+
+### CSI Driver Deployment with TLS
+
+The CSI driver deployment follows the upstream external-snapshot-metadata integration test pattern. The deployment process (`manifests/csi-driver/deploy-with-cbt.sh`) executes these steps:
+
+1. **Deploy Snapshot Controller** (`scripts/deploy-snapshot-controller.sh`):
+   - Installs VolumeSnapshot CRDs (VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass)
+   - Deploys snapshot controller pod
+   - Uses snapshot version v8.1.0 from upstream external-snapshotter
+
+2. **Generate TLS Certificates** (`scripts/generate-csi-certs.sh`):
+   - Creates self-signed CA certificate and key
+   - Generates server certificate with Subject Alternative Names (SANs)
+   - Creates Kubernetes TLS secret: `csi-snapshot-metadata-certs`
+   - Updates `snapshotmetadataservice.yaml` with base64-encoded CA cert
+
+3. **Clone CSI Hostpath Driver**:
+   - Clones from `https://github.com/kubernetes-csi/csi-driver-host-path.git`
+   - Uses temporary directory `/tmp/csi-driver-host-path`
+
+4. **Install SnapshotMetadataService CRD**:
+   - Applies from external-snapshot-metadata repository (v0.1.0 or main)
+   - Waits for CRD to be established
+
+5. **Deploy CSI Driver with Environment Variables**:
+   - `CSI_SNAPSHOT_METADATA_REGISTRY=gcr.io/k8s-staging-sig-storage`
+   - `UPDATE_RBAC_RULES=false` (RBAC already configured)
+   - `CSI_SNAPSHOT_METADATA_TAG=test` (uses test image)
+   - `SNAPSHOT_METADATA_TESTS=true` (enables metadata sidecar)
+   - `HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage`
+   - `HOSTPATHPLUGIN_TAG=canary` (latest development version)
+
+6. **Apply Testdata Manifests**:
+   - Creates SnapshotMetadataService CR (`hostpath.csi.k8s.io`)
+   - Creates ClusterIP service (`csi-snapshot-metadata`) on port 6443
+   - Service routes to snapshot metadata sidecar on port 50051
+
+7. **Wait for Pod Readiness**:
+   - Waits for `csi-hostpathplugin-0` pod to be Running
+   - Verifies StatefulSet rollout status
+
+**Key Configuration Details:**
+- **gRPC Endpoint**: `csi-snapshot-metadata.default:6443` (TLS-secured)
+- **TLS Secret**: `csi-snapshot-metadata-certs` in `default` namespace
+- **Service Selectors**: Targets pods with labels:
+  - `app.kubernetes.io/name=csi-hostpathplugin`
+  - `app.kubernetes.io/component=plugin`
+  - `app.kubernetes.io/instance=hostpath.csi.k8s.io`
 
 ### CSI SnapshotMetadata gRPC Client
 
@@ -278,15 +333,15 @@ The backup tool interacts with Kubernetes via:
 When `gh run watch` exits cleanly (exit code 0), the run has already completed successfully. **No need to sleep and check status again** - the command blocks until the run finishes.
 
 ```bash
-# This already waits for completion and exits when done
-gh run watch 18798961487 --exit-status
+# ✓ MOST EFFICIENT: Pipe watch to /dev/null and immediately view on success
+gh run watch 18798961487 --exit-status > /dev/null && gh run view 18798961487
+
+# ✓ ALSO CORRECT: Just check the logs or details directly
+gh run view 18798961487 --log
+gh run view 18798961487 --job=<job-id> --log
 
 # ✗ WRONG: Don't do this after gh run watch succeeds
 sleep 180 && gh run view 18798961487
-
-# ✓ CORRECT: Just check the logs or details directly
-gh run view 18798961487 --log
-gh run view 18798961487 --job=<job-id> --log
 ```
 
 ### Git Commit Practices

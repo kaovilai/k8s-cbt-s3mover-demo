@@ -142,11 +142,18 @@ Access MinIO:
 ./scripts/02-deploy-csi-driver.sh
 ```
 
-This deploys:
-- CSI hostpath driver
-- External snapshot metadata sidecar
-- SnapshotMetadataService CRD
-- VolumeSnapshotClass
+This deploys (following upstream external-snapshot-metadata integration test pattern):
+- Snapshot controller with VolumeSnapshot CRDs
+- TLS certificates for secure gRPC communication
+- CSI hostpath driver with snapshot metadata sidecar
+- SnapshotMetadataService CRD and CR
+- ClusterIP service for snapshot metadata (port 6443)
+- StorageClass and VolumeSnapshotClass
+
+**Key Features:**
+- ✅ TLS-secured gRPC endpoint (`csi-snapshot-metadata.default:6443`)
+- ✅ Uses upstream staging registry images (`gcr.io/k8s-staging-sig-storage`)
+- ✅ Matches official external-snapshot-metadata integration tests
 
 ```bash
 # 4. Deploy PostgreSQL with block-mode PVC
