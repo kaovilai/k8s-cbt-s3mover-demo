@@ -98,18 +98,18 @@ cd "$CSI_DRIVER_DIR"
 echo "Deploying CSI driver with environment variables:"
 echo "  CSI_SNAPSHOT_METADATA_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  UPDATE_RBAC_RULES=false"
-echo "  CSI_SNAPSHOT_METADATA_TAG=v0.1.0"
+echo "  CSI_SNAPSHOT_METADATA_TAG=canary"
 echo "  SNAPSHOT_METADATA_TESTS=true"
 echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  HOSTPATHPLUGIN_TAG=canary"
 echo ""
 
 # Deploy with environment variables
-# Note: Using v0.1.0 tag for csi-snapshot-metadata (stable release)
-# Upstream integration tests use "test" tag but build the image locally first
+# Note: Using canary tag for latest builds from main branch
+# See https://github.com/kubernetes-csi/csi-driver-host-path/blob/main/release-tools/README.md
 CSI_SNAPSHOT_METADATA_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 UPDATE_RBAC_RULES="false" \
-CSI_SNAPSHOT_METADATA_TAG="v0.1.0" \
+CSI_SNAPSHOT_METADATA_TAG="canary" \
 SNAPSHOT_METADATA_TESTS=true \
 HOSTPATHPLUGIN_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 HOSTPATHPLUGIN_TAG="canary" \
