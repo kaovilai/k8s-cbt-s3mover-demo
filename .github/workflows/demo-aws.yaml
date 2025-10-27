@@ -285,8 +285,11 @@ jobs:
 
           # Use the snapshot-metadata-lister to get allocated blocks
           kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
-            -s "$SNAPSHOT_NAME" \
-            -n cbt-demo || {
+            -snapshot "$SNAPSHOT_NAME" \
+            -namespace cbt-demo \
+            -starting-offset 0 \
+            -max-results 10 \
+            -kubeconfig "" || {
             echo ""
             echo "⚠ GetMetadataAllocated call failed"
             echo "  This may happen if:"
@@ -377,9 +380,12 @@ jobs:
           echo ""
           echo "Testing GetMetadataDelta with snapshot names..."
           kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
-            -p postgres-snapshot-1 \
-            -s postgres-snapshot-2 \
-            -n cbt-demo || {
+            -previous-snapshot postgres-snapshot-1 \
+            -snapshot postgres-snapshot-2 \
+            -namespace cbt-demo \
+            -starting-offset 0 \
+            -max-results 10 \
+            -kubeconfig "" || {
             echo ""
             echo "⚠ GetMetadataDelta with snapshot names failed"
             echo "Trying with CSI handle..."
@@ -390,11 +396,14 @@ jobs:
           echo "Testing GetMetadataDelta with CSI handle (PR #180)"
           echo "=========================================="
           echo ""
-          echo "Using -P flag with CSI snapshot handle..."
+          echo "Using -previous-snapshot-id flag with CSI snapshot handle..."
           kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
-            -P "$SNAP_HANDLE" \
-            -s postgres-snapshot-2 \
-            -n cbt-demo || {
+            -previous-snapshot-id "$SNAP_HANDLE" \
+            -snapshot postgres-snapshot-2 \
+            -namespace cbt-demo \
+            -starting-offset 0 \
+            -max-results 10 \
+            -kubeconfig "" || {
             echo ""
             echo "⚠ GetMetadataDelta with CSI handle failed"
             echo "This feature requires PR #180 to be merged and built from @main"

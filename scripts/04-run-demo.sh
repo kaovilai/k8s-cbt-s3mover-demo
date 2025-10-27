@@ -23,8 +23,8 @@ echo "[Step 0] Verifying infrastructure..."
 if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     echo "Error: Namespace '$NAMESPACE' not found. Run setup scripts first:"
     echo "  ./scripts/00-setup-cluster.sh"
-    echo "  ./scripts/01-deploy-minio.sh"
-    echo "  ./scripts/02-deploy-csi-driver.sh"
+    echo "  ./scripts/01-deploy-csi-driver.sh"
+    echo "  ./scripts/02-deploy-minio.sh"
     echo "  ./scripts/03-deploy-workload.sh"
     exit 1
 fi
