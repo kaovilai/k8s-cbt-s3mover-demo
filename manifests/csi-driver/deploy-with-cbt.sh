@@ -98,16 +98,18 @@ cd "$CSI_DRIVER_DIR"
 echo "Deploying CSI driver with environment variables:"
 echo "  CSI_SNAPSHOT_METADATA_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  UPDATE_RBAC_RULES=false"
-echo "  CSI_SNAPSHOT_METADATA_TAG=test"
+echo "  CSI_SNAPSHOT_METADATA_TAG=v0.1.0"
 echo "  SNAPSHOT_METADATA_TESTS=true"
 echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  HOSTPATHPLUGIN_TAG=canary"
 echo ""
 
-# Deploy with the same environment variables used in upstream integration tests
+# Deploy with environment variables
+# Note: Using v0.1.0 tag for csi-snapshot-metadata (stable release)
+# Upstream integration tests use "test" tag but build the image locally first
 CSI_SNAPSHOT_METADATA_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 UPDATE_RBAC_RULES="false" \
-CSI_SNAPSHOT_METADATA_TAG="test" \
+CSI_SNAPSHOT_METADATA_TAG="v0.1.0" \
 SNAPSHOT_METADATA_TESTS=true \
 HOSTPATHPLUGIN_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 HOSTPATHPLUGIN_TAG="canary" \
