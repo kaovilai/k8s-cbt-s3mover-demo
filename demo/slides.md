@@ -213,7 +213,7 @@ layout: default
 
 <div class="text-xs">
 
-```mermaid {theme: 'neutral', scale: 0.6}
+```mermaid {theme: 'neutral', scale: 0.5}
 graph TB
     subgraph app["Application Layer"]
         PG[PostgreSQL<br/>write syscall]
@@ -251,18 +251,9 @@ graph TB
 
 <v-clicks>
 
-### Why PostgreSQL Data Was Invisible
+**PostgreSQL Invisible**: Page cache delay (5-30s) + ext4 fragmentation → CBT sees mostly zeros
 
-1. **Page cache delay**: 5-30 seconds before flush
-2. **Filesystem fragmentation**: Data scattered across metadata, journal, data blocks
-3. **CBT sees raw blocks**: Mostly zeros and filesystem structures
-4. **Database data hidden**: Inside ext4 abstractions
-
-### Why Raw Block Writes Worked
-
-1. **Direct block I/O**: No filesystem layer
-2. **Immediate visibility**: No page cache delay
-3. **CBT sees exactly what was written**: 100 blocks of random data
+**Raw Block Works**: Direct I/O bypasses filesystem/cache → Immediate CBT visibility
 
 </v-clicks>
 
