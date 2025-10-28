@@ -483,67 +483,112 @@ When PostgreSQL writes data through ext4:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**Real-World Impact: Our EC2 Experiment Results**
+**Real-World Impact: Our Actual Experimental Results**
 
-In our testing with PostgreSQL + ext4:
+**Experiment 1: PostgreSQL + ext4 (Initial Attempt - FAILED)**
+
+We initially tested with PostgreSQL StatefulSet using `volumeMode: Block` PVC (see [commit 94c5aaaa](https://github.com/kaovilai/k8s-cbt-s3mover-demo/commit/94c5aaaaff6f43af114427d3ba637ce4ed794fe4)):
 
 ```bash
-# PostgreSQL wrote data through ext4
+# PostgreSQL received /dev/xvda (volumeMode: Block)
+# PostgreSQL formatted it with ext4 and wrote data through the filesystem
 kubectl exec postgres-0 -- psql -U postgres -c "INSERT INTO demo_data ..."
 
 # Created snapshot
-kubectl create -f block-snapshot-1.yaml
+kubectl create -f postgres-snapshot-1.yaml
 
-# Checked raw snapshot file in CSI driver
-kubectl exec csi-hostpathplugin-0 -- \
-  dd if=/csi-data-dir/snapshot-id.snap bs=4096 count=100 | od -An -tx1
-
-# Result: 00 00 00 00 00 00 00 00 ... (all zeros!)
-# GetMetadataAllocated returned: [] (empty array)
+# Ran snapshot-metadata-lister
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -s postgres-snapshot-1 -n cbt-demo
 ```
 
-**Why It Failed:**
-- PostgreSQL wrote to ext4 filesystem
-- ext4 formatted the block device with superblocks, inode tables, etc.
-- Data existed inside ext4 data structures
-- CBT saw the raw blocks - which were mostly zeros and filesystem metadata
-- Actual database data was "hidden" inside filesystem layer
+**Result**: **NO OUTPUT** - snapshot-metadata-lister returned empty array `[]`
 
-**The Working Solution: Raw Block Device Writes**
+**Root Cause Analysis (from commit message)**:
+> "PostgreSQL creates an ext4 filesystem on the block device and writes data to logical filesystem blocks. However, CBT reads raw device blocks which remain mostly zeros despite the filesystem having data. This is why snapshot-metadata-lister produces no output."
 
-When we switched to raw block device access:
+**Why PostgreSQL Failed (Even with `volumeMode: Block`):**
+- PostgreSQL received `/dev/xvda` as a raw block device from Kubernetes
+- PostgreSQL's entrypoint/initialization **formatted the device with ext4**
+- PostgreSQL wrote data through the ext4 filesystem layer
+- Page cache barrier: data existed in kernel memory for 5-30 seconds
+- Filesystem fragmentation: data scattered across superblocks, inodes, journal, data blocks
+- **CBT saw raw blocks**: mostly zeros and ext4 metadata structures
+- **Database data was "hidden"** inside filesystem abstractions
+
+**Experiment 2: Raw Block Device Writes (EC2 Test - SUCCESS)**
+
+After discovering the PostgreSQL failure, we tested on EC2 with direct block device writes:
 
 ```bash
-# Write directly to raw block device (no filesystem)
-kubectl exec block-writer -- dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100
+# Created test pod with volumeMode: Block, but NO filesystem formatting
+# Pod: busybox with /dev/xvdb exposed as raw device
+kubectl apply -f cbt-test-volume.yaml
 
-# Created snapshot
+# Wrote 100 blocks of random data directly to raw device
+kubectl exec block-writer -- dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100 seek=0
+
+# Created first snapshot
 kubectl create -f cbt-test-snap-1.yaml
 
-# Checked raw snapshot file
+# Checked raw snapshot file - data is visible!
 kubectl exec csi-hostpathplugin-0 -- \
-  dd if=/csi-data-dir/snapshot-id.snap bs=4096 count=1 | od -An -tx1
+  dd if=/csi-data-dir/78580429-b3c1-11f0-ae5a-9ede7a3ad1de.snap bs=4096 count=1 | od -An -tx1
+# Output: f2 5b 6c 18 3d e0 36 73 ... (random data visible!)
 
-# Result: f2 5b 6c 18 3d e0 36 73 ... (random data!)
-# GetMetadataAllocated returned: [100 blocks] ✅ SUCCESS
+# Ran GetMetadataAllocated
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -s cbt-test-snap-1 -n cbt-demo -o json
 ```
 
-**Why It Worked:**
+**Result**: **SUCCESS!** GetMetadataAllocated returned **100 blocks** ✅
+
+```json
+{
+  "block_metadata_type": 1,
+  "volume_capacity_bytes": 104857600,
+  "block_metadata": [
+    {"byte_offset": 0, "size_bytes": 4096},
+    {"byte_offset": 4096, "size_bytes": 4096},
+    ... (100 blocks total)
+  ]
+}
+```
+
+**Incremental Test (GetMetadataDelta)**:
+
+```bash
+# Wrote additional changes:
+# - 30 modified blocks at offset 20 (blocks 20-49): overwritten with zeros
+# - 50 new blocks at offset 200 (blocks 200-249): new random data
+
+# Created second snapshot
+kubectl create -f cbt-test-snap-2.yaml
+
+# Ran GetMetadataDelta
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -p cbt-test-snap-1 -s cbt-test-snap-2 -n cbt-demo -o json
+```
+
+**Result**: **SUCCESS!** GetMetadataDelta returned **80 changed blocks** ✅ (30 modified + 50 new)
+
+**Why Raw Block Writes Worked:**
 - `dd` wrote directly to `/dev/xvdb` (raw block device)
-- No filesystem layer - data went straight to blocks
-- No page cache delay - data visible immediately after sync
-- CBT saw exactly what was written - 100 blocks of random data
+- **No filesystem layer** - data went straight to blocks
+- **No page cache delay** - data visible immediately after sync
+- **CBT saw exactly what was written** - 100 blocks of random data, then 80 changed blocks
 
 **Key Takeaways:**
 
-1. **Filesystem writes are invisible to CBT** because data exists in page cache for 5-30 seconds before block I/O
-2. **CBT requires `volumeMode: Block`** to see actual block-level changes
-3. **Production workloads** using CBT must either:
-   - Use raw block devices directly (databases like Cassandra, MongoDB with DirectIO)
+1. **`volumeMode: Block` is necessary but NOT sufficient** - it only controls how Kubernetes exposes the device to the pod
+2. **Applications must write directly to raw block devices** - if the application creates a filesystem (like PostgreSQL does), CBT won't see the data
+3. **Filesystem writes are invisible to CBT** because data exists in page cache for 5-30 seconds before block I/O, and then is scattered across filesystem structures
+4. **Production workloads** using CBT must either:
+   - Use applications that write directly to raw block devices (databases with DirectIO like Cassandra, ScyllaDB)
    - Implement custom backup agents that trigger filesystem sync before snapshots
-   - Accept that CBT will only track block-level changes, not filesystem-level changes
+   - Accept limitations and understand timing/visibility constraints
 
-This is why the demo uses `volumeMode: Block` and direct block device writes - it's the only way to demonstrate real CBT functionality.
+**Experimental Evidence**: We proved this by testing both approaches - PostgreSQL with ext4 returned empty results, while direct `dd` writes to raw blocks successfully produced CBT metadata.
 
 ## ⚠️ Known Limitations
 
