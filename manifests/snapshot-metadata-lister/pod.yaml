@@ -15,7 +15,7 @@ spec:
       apt-get update && apt-get install -y git
       git clone https://github.com/kubernetes-csi/external-snapshot-metadata.git /tmp/repo
       cd /tmp/repo/examples/snapshot-metadata-lister
-      go build -o /output/snapshot-metadata-lister .
+      CGO_ENABLED=0 go build -o /output/snapshot-metadata-lister .
     volumeMounts:
     - name: shared-volume
       mountPath: /output
