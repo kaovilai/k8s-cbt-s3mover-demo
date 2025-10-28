@@ -9,65 +9,60 @@ echo "=========================================="
 
 EXIT_CODE=0
 
-# Check PostgreSQL data integrity
-echo "Checking PostgreSQL data..."
-if kubectl get pod -n "$NAMESPACE" -l app=postgres &> /dev/null; then
-    POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+# Check block-writer workload integrity
+echo "Checking block-writer workload..."
+if kubectl get pod -n "$NAMESPACE" -l app=block-writer &> /dev/null; then
+    BLOCK_WRITER_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
 
-    if [ -n "$POSTGRES_POD" ]; then
-        echo "✓ PostgreSQL pod found: $POSTGRES_POD"
+    if [ -n "$BLOCK_WRITER_POD" ]; then
+        echo "✓ Block-writer pod found: $BLOCK_WRITER_POD"
         echo ""
 
-        # Check if PostgreSQL is ready
-        if kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- pg_isready -U demo &> /dev/null; then
-            echo "✓ PostgreSQL is ready"
+        # Check if block device is accessible
+        if kubectl exec -n "$NAMESPACE" "$BLOCK_WRITER_POD" -- test -b /dev/xvda &> /dev/null; then
+            echo "✓ Block device /dev/xvda is accessible"
 
-            # Get row count
+            # Get device size
             echo ""
-            echo "Database statistics:"
-            kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -c \
-                "SELECT COUNT(*) as total_rows,
-                        pg_size_pretty(pg_total_relation_size('demo_data')) as table_size
-                 FROM demo_data;" 2>/dev/null || {
-                echo "✗ Failed to query database"
+            echo "Block device information:"
+            kubectl exec -n "$NAMESPACE" "$BLOCK_WRITER_POD" -- sh -c \
+                "blockdev --getsize64 /dev/xvda | awk '{printf \"Device size: %.2f MB\\n\", \$1/1024/1024}'" 2>/dev/null || {
+                echo "✗ Failed to get device size"
                 EXIT_CODE=1
             }
 
-            # Verify checksums
+            # Sample some blocks to verify data was written
             echo ""
-            echo "Verifying data checksums (sampling)..."
-            CHECKSUM_ERRORS=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c \
-                "SELECT COUNT(*) FROM demo_data
-                 WHERE checksum != md5(content)
-                 LIMIT 100;" 2>/dev/null | tr -d ' ')
+            echo "Sampling block data (checking for non-zero blocks)..."
+            NON_ZERO_BLOCKS=0
 
-            if [ "$CHECKSUM_ERRORS" == "0" ]; then
-                echo "✓ Checksum validation passed (sampled 100 rows)"
+            # Check a few known write positions: seek 1,3,5,7,9 (initial write)
+            for seek_pos in 1 3 5 7 9; do
+                HAS_DATA=$(kubectl exec -n "$NAMESPACE" "$BLOCK_WRITER_POD" -- sh -c \
+                    "dd if=/dev/xvda bs=4K count=1 skip=$seek_pos 2>/dev/null | tr -d '\\0' | wc -c" 2>/dev/null || echo "0")
+
+                if [ "$HAS_DATA" -gt 0 ]; then
+                    NON_ZERO_BLOCKS=$((NON_ZERO_BLOCKS + 1))
+                fi
+            done
+
+            if [ "$NON_ZERO_BLOCKS" -gt 0 ]; then
+                echo "✓ Found $NON_ZERO_BLOCKS non-zero blocks (data is present)"
             else
-                echo "✗ Found $CHECKSUM_ERRORS checksum mismatches"
-                EXIT_CODE=1
+                echo "⚠ No non-zero blocks found (data may not have been written yet)"
             fi
 
-            # Check for data blocks distribution
-            echo ""
-            echo "Data block distribution:"
-            kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -c \
-                "SELECT MIN(data_block) as min_block,
-                        MAX(data_block) as max_block,
-                        COUNT(DISTINCT data_block) as unique_blocks
-                 FROM demo_data;" 2>/dev/null
-
         else
-            echo "✗ PostgreSQL is not ready"
+            echo "✗ Block device /dev/xvda is not accessible"
             EXIT_CODE=1
         fi
     else
-        echo "✗ No PostgreSQL pod found"
+        echo "✗ No block-writer pod found"
         EXIT_CODE=1
     fi
 else
-    echo "⚠ PostgreSQL pod not found in namespace '$NAMESPACE'"
-    echo "  Skipping database integrity check"
+    echo "⚠ Block-writer pod not found in namespace '$NAMESPACE'"
+    echo "  Skipping workload integrity check"
 fi
 
 # Check PVC status
@@ -86,9 +81,9 @@ STORAGECLASS:.spec.storageClassName,\
 MODE:.spec.volumeMode
 
 # Verify PVC is bound and using block mode
-# Get the postgres PVC specifically (not the first PVC which might be minio)
-PVC_STATUS=$(kubectl get pvc -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].status.phase}')
-VOLUME_MODE=$(kubectl get pvc -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].spec.volumeMode}')
+# Get the block-writer PVC specifically (not the first PVC which might be minio)
+PVC_STATUS=$(kubectl get pvc -n "$NAMESPACE" block-writer-data -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+VOLUME_MODE=$(kubectl get pvc -n "$NAMESPACE" block-writer-data -o jsonpath='{.spec.volumeMode}' 2>/dev/null || echo "NotFound")
 
 if [ "$PVC_STATUS" == "Bound" ]; then
     echo ""
