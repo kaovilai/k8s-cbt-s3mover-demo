@@ -28,7 +28,7 @@ This demo showcases:
 │                Kubernetes Cluster                        │
 │                                                           │
 │  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐ │
-│  │  PostgreSQL  │  │   MinIO S3    │  │  CSI Driver  │ │
+│  │Block Writer  │  │   MinIO S3    │  │  CSI Driver  │ │
 │  │  (Block PVC) │  │   Storage     │  │  with CBT    │ │
 │  └──────────────┘  └───────────────┘  └──────────────┘ │
 │         │                  │                  │          │
@@ -75,7 +75,7 @@ brew install minikube kubectl
 2. ✅ Create Kubernetes cluster
 3. ✅ Deploy MinIO S3 storage
 4. ✅ Deploy CSI driver with CBT support
-5. ✅ Deploy PostgreSQL workload
+5. ✅ Deploy block-writer workload with raw block device access
 6. ✅ Create snapshots demonstrating CBT workflow
 
 #### Manual Step-by-Step Setup
@@ -113,7 +113,7 @@ This will:
 - Deploy MinIO for S3 storage
 - Install VolumeSnapshot CRDs (if needed)
 - Optionally install CSI driver
-- Deploy PostgreSQL workload
+- Deploy block-writer workload with raw block device access
 - Validate the setup
 
 #### Manual Remote Cluster Setup
@@ -156,7 +156,7 @@ Access MinIO:
 - **Credentials**: minioadmin / minioadmin123
 
 ```bash
-# 4. Deploy PostgreSQL with block-mode PVC
+# 4. Deploy block-writer with block-mode PVC
 ./scripts/03-deploy-workload.sh
 
 # 5. Run the demo workflow
@@ -164,8 +164,8 @@ Access MinIO:
 ```
 
 This creates:
-- PostgreSQL StatefulSet with 2Gi block PVC
-- Initial data (~100MB) in demo_data table
+- Block-writer pod with 1Gi block PVC for raw device access
+- Writes data directly to raw block device (no filesystem layer)
 
 ## 🧪 Demo Workflow
 
@@ -184,12 +184,12 @@ This creates:
    apiVersion: snapshot.storage.k8s.io/v1
    kind: VolumeSnapshot
    metadata:
-     name: postgres-snapshot-1
+     name: block-snapshot-1
      namespace: cbt-demo
    spec:
      volumeSnapshotClassName: csi-hostpath-snapclass
      source:
-       persistentVolumeClaimName: postgres-data-postgres-0
+       persistentVolumeClaimName: block-writer-data
    EOF
    ```
 
@@ -198,17 +198,16 @@ This creates:
    # This creates snapshot and uploads metadata (CBT APIs functional)
    cd tools/cbt-backup
    go build -o cbt-backup ./cmd
-   ./cbt-backup create --pvc postgres-data-postgres-0 \
-     --snapshot postgres-snapshot-1
+   ./cbt-backup create --pvc block-writer-data \
+     --snapshot block-snapshot-1
    ```
 
-3. **Insert more data**
+3. **Write more data to block device**
    ```bash
-   kubectl exec -it -n cbt-demo postgres-0 -- psql -U demo -d cbtdemo -c \
-     "INSERT INTO demo_data (data_block, content, checksum)
-      SELECT generate_series(1001, 1100),
-             encode(gen_random_bytes(100000), 'base64'),
-             md5(random()::text);"
+   # Write random data at different block offsets (incremental changes)
+   kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=15 conv=notrunc
+   kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=17 conv=notrunc
+   kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=19 conv=notrunc
    ```
 
 4. **Create second snapshot** (incremental)
@@ -217,12 +216,12 @@ This creates:
    apiVersion: snapshot.storage.k8s.io/v1
    kind: VolumeSnapshot
    metadata:
-     name: postgres-snapshot-2
+     name: block-snapshot-2
      namespace: cbt-demo
    spec:
      volumeSnapshotClassName: csi-hostpath-snapclass
      source:
-       persistentVolumeClaimName: postgres-data-postgres-0
+       persistentVolumeClaimName: block-writer-data
    EOF
    ```
 
@@ -230,34 +229,34 @@ This creates:
    ```bash
    # This uses GetMetadataDelta() to find changed blocks
    cd tools/cbt-backup
-   ./cbt-backup create --pvc postgres-data-postgres-0 \
-     --snapshot postgres-snapshot-2 \
-     --base-snapshot postgres-snapshot-1
+   ./cbt-backup create --pvc block-writer-data \
+     --snapshot block-snapshot-2 \
+     --base-snapshot block-snapshot-1
    ```
 
 6. **Simulate disaster**
    ```bash
-   kubectl delete statefulset postgres -n cbt-demo
-   kubectl delete pvc postgres-data-postgres-0 -n cbt-demo
+   kubectl delete pod block-writer -n cbt-demo
+   kubectl delete pvc block-writer-data -n cbt-demo
    ```
 
 7. **Restore from backups**
    ```bash
    # ⚠️ Restore tool not yet implemented - see STATUS.md
    # Planned usage:
-   # ./tools/cbt-restore/cbt-restore restore --pvc postgres-data \
-   #   --snapshots postgres-snapshot-1,postgres-snapshot-2
+   # ./tools/cbt-restore/cbt-restore restore --pvc block-writer-data \
+   #   --snapshots block-snapshot-1,block-snapshot-2
 
    # Current workaround: Restore from VolumeSnapshot directly
    kubectl apply -f - <<EOF
    apiVersion: v1
    kind: PersistentVolumeClaim
    metadata:
-     name: postgres-data-restored
+     name: block-writer-data-restored
      namespace: cbt-demo
    spec:
      dataSource:
-       name: postgres-snapshot-2
+       name: block-snapshot-2
        kind: VolumeSnapshot
        apiGroup: snapshot.storage.k8s.io
      accessModes:
@@ -265,7 +264,7 @@ This creates:
      volumeMode: Block
      resources:
        requests:
-         storage: 2Gi
+         storage: 1Gi
      storageClassName: csi-hostpath-sc
    EOF
    ```
@@ -342,7 +341,7 @@ k8s-cbt-s3mover-demo/
 │   ├── namespace.yaml
 │   ├── minio/                     # MinIO S3 storage
 │   ├── csi-driver/                # CSI driver with CBT
-│   └── workload/                  # PostgreSQL workload
+│   └── workload/                  # Block-writer workload (raw block device)
 ├── tools/
 │   ├── cbt-backup/                # Backup tool (Go)
 │   └── cbt-restore/               # Restore tool (Go)
@@ -397,6 +396,148 @@ type BlockMetadata struct {
   - Field renamed: `base_snapshot_name` → `base_snapshot_id`
   - Client tools now support both `-p <name>` and `-P <csi-handle>` flags
   - CSI handle approach is preferred for production use
+
+### Why Block Mode Volumes Are Required
+
+**Critical Understanding**: CBT operates at the **raw block device layer**, not the filesystem layer. This creates a fundamental visibility barrier when using filesystem-mode volumes.
+
+#### Filesystem Writes Remain Invisible Due to Multiple Abstraction Layers
+
+When applications write data through a filesystem (like ext4, xfs, or NTFS), those writes traverse multiple kernel abstraction layers before reaching the block device:
+
+**1. Page Cache and Buffer Cache: The Primary Invisibility Barrier**
+
+The Linux kernel's page cache and buffer cache create the primary invisibility barrier between filesystem writes and block device I/O:
+
+```
+Application (PostgreSQL) → Filesystem (ext4) → Page Cache → [INVISIBLE TO CBT] → Block Device
+                                                    ↓
+                                            Dirty Pages (5-30 seconds)
+                                                    ↓
+                                            Background Flush (bdflush)
+                                                    ↓
+                                            [VISIBLE TO CBT] → Block Device I/O
+```
+
+**Example: PostgreSQL Writing Through ext4**
+
+When PostgreSQL writes data through ext4:
+
+1. **Initial Write** (0ms): PostgreSQL executes `write()` syscall
+   - Data lands in kernel page cache as "dirty" pages
+   - ext4 filesystem metadata updated in memory
+   - **PostgreSQL receives success immediately**
+   - **CBT sees**: Nothing - no block device I/O has occurred
+
+2. **Dirty Page Window** (5-30 seconds): Kernel memory only
+   - Dirty pages remain in RAM, marked for eventual flush
+   - Kernel's background flush daemons (`bdflush`, `pdflush`) wait
+   - Default flush intervals: 5-30 seconds (tunable via `/proc/sys/vm/dirty_*`)
+   - **CBT sees**: Still nothing - data exists only in page cache
+
+3. **Background Flush** (5-30s later): Block device I/O begins
+   - Kernel flushes dirty pages to block device
+   - ext4 journal commits and data blocks written
+   - **CBT sees**: Block writes - but they're scattered across filesystem structures
+   - **Problem**: CBT sees filesystem metadata blocks, journal blocks, and data blocks mixed together
+
+4. **Snapshot Captured**: What CBT observes
+   - Most blocks contain zeros (unallocated filesystem space)
+   - Some blocks contain ext4 superblocks, inodes, directory entries
+   - Some blocks contain actual data - but heavily fragmented
+   - **Result**: Empty `[]` metadata array because PostgreSQL data is "hidden" inside filesystem structures
+
+**Visual Representation of Data Flow:**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ Application Layer (PostgreSQL)                                 │
+│   write(fd, data, size) → Returns SUCCESS immediately          │
+└────────────────────────────────────────────────────────────────┘
+                            ↓
+┌────────────────────────────────────────────────────────────────┐
+│ Filesystem Layer (ext4)                                        │
+│   - Updates inode metadata                                     │
+│   - Marks pages as dirty                                       │
+│   - Journals the change                                        │
+└────────────────────────────────────────────────────────────────┘
+                            ↓
+┌────────────────────────────────────────────────────────────────┐
+│ Page Cache Layer (INVISIBLE TO CBT)                            │
+│   - Dirty pages: 5-30 second window                            │
+│   - No block device I/O yet                                    │
+│   ❌ CBT CANNOT SEE THIS LAYER                                 │
+└────────────────────────────────────────────────────────────────┘
+                            ↓ (after flush delay)
+┌────────────────────────────────────────────────────────────────┐
+│ Block Device Layer (VISIBLE TO CBT)                            │
+│   - Actual disk writes occur                                   │
+│   - Scattered across filesystem structures                     │
+│   ✅ CBT SEES THIS - but data is fragmented/mixed              │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Real-World Impact: Our EC2 Experiment Results**
+
+In our testing with PostgreSQL + ext4:
+
+```bash
+# PostgreSQL wrote data through ext4
+kubectl exec postgres-0 -- psql -U postgres -c "INSERT INTO demo_data ..."
+
+# Created snapshot
+kubectl create -f postgres-snapshot-1.yaml
+
+# Checked raw snapshot file in CSI driver
+kubectl exec csi-hostpathplugin-0 -- \
+  dd if=/csi-data-dir/snapshot-id.snap bs=4096 count=100 | od -An -tx1
+
+# Result: 00 00 00 00 00 00 00 00 ... (all zeros!)
+# GetMetadataAllocated returned: [] (empty array)
+```
+
+**Why It Failed:**
+- PostgreSQL wrote to ext4 filesystem
+- ext4 formatted the block device with superblocks, inode tables, etc.
+- Data existed inside ext4 data structures
+- CBT saw the raw blocks - which were mostly zeros and filesystem metadata
+- Actual database data was "hidden" inside filesystem layer
+
+**The Working Solution: Raw Block Device Writes**
+
+When we switched to raw block device access:
+
+```bash
+# Write directly to raw block device (no filesystem)
+kubectl exec block-writer -- dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100
+
+# Created snapshot
+kubectl create -f cbt-test-snap-1.yaml
+
+# Checked raw snapshot file
+kubectl exec csi-hostpathplugin-0 -- \
+  dd if=/csi-data-dir/snapshot-id.snap bs=4096 count=1 | od -An -tx1
+
+# Result: f2 5b 6c 18 3d e0 36 73 ... (random data!)
+# GetMetadataAllocated returned: [100 blocks] ✅ SUCCESS
+```
+
+**Why It Worked:**
+- `dd` wrote directly to `/dev/xvdb` (raw block device)
+- No filesystem layer - data went straight to blocks
+- No page cache delay - data visible immediately after sync
+- CBT saw exactly what was written - 100 blocks of random data
+
+**Key Takeaways:**
+
+1. **Filesystem writes are invisible to CBT** because data exists in page cache for 5-30 seconds before block I/O
+2. **CBT requires `volumeMode: Block`** to see actual block-level changes
+3. **Production workloads** using CBT must either:
+   - Use raw block devices directly (databases like Cassandra, MongoDB with DirectIO)
+   - Implement custom backup agents that trigger filesystem sync before snapshots
+   - Accept that CBT will only track block-level changes, not filesystem-level changes
+
+This is why the demo uses `volumeMode: Block` and direct block device writes - it's the only way to demonstrate real CBT functionality.
 
 ## ⚠️ Known Limitations
 

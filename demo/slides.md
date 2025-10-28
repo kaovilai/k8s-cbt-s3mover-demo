@@ -98,6 +98,200 @@ graph TB
 layout: default
 ---
 
+# Why Block Mode Volumes Are Required
+
+<div class="text-sm">
+
+<v-click>
+
+## Critical Understanding
+
+CBT operates at the **raw block device layer**, not the filesystem layer. This creates a fundamental visibility barrier.
+
+</v-click>
+
+<v-clicks depth="2">
+
+## Filesystem Write Path (INVISIBLE to CBT)
+
+```
+Application → Filesystem → Page Cache → [CBT BLIND SPOT] → Block Device
+  (PostgreSQL)    (ext4)    (5-30s delay)                      (CBT sees here)
+```
+
+### The Page Cache Barrier
+
+1. **Initial Write** (0ms)
+   - PostgreSQL: `write()` syscall → Success
+   - Data lands in **kernel page cache** (dirty pages)
+   - **CBT sees**: Nothing (no block I/O yet)
+
+2. **Dirty Page Window** (5-30 seconds)
+   - Data exists only in RAM
+   - Kernel flushes in background (`bdflush`)
+   - **CBT sees**: Still nothing
+
+3. **Block Device I/O** (after flush)
+   - Finally visible to CBT
+   - But scattered across filesystem structures (metadata, journal, data blocks)
+
+</v-clicks>
+
+</div>
+
+---
+layout: two-cols
+---
+
+# Real Experiment: PostgreSQL vs Raw Blocks
+
+<v-click>
+
+## ❌ PostgreSQL + ext4 (FAILED)
+
+```bash
+# Wrote data through filesystem
+kubectl exec postgres-0 -- psql -c \
+  "INSERT INTO demo_data ..."
+
+# Created snapshot
+kubectl create -f postgres-snapshot-1.yaml
+
+# Checked raw snapshot blocks
+dd if=/csi-data-dir/snapshot.snap \
+  bs=4096 count=100 | od -An -tx1
+```
+
+**Result**: `00 00 00 00 ...` (all zeros!)
+
+**GetMetadataAllocated**: `[]` (empty array)
+
+</v-click>
+
+::right::
+
+<v-click>
+
+## ✅ Raw Block Writes (SUCCESS)
+
+```bash
+# Wrote directly to block device
+kubectl exec block-writer -- \
+  dd if=/dev/urandom of=/dev/xvdb \
+  bs=4096 count=100
+
+# Created snapshot
+kubectl create -f cbt-test-snap-1.yaml
+
+# Checked raw snapshot blocks
+dd if=/csi-data-dir/snapshot.snap \
+  bs=4096 count=1 | od -An -tx1
+```
+
+**Result**: `f2 5b 6c 18 3d e0 36 73 ...` (random data!)
+
+**GetMetadataAllocated**: **100 blocks** ✅
+
+</v-click>
+
+---
+layout: default
+---
+
+# Filesystem Abstraction Layers
+
+<div class="text-xs">
+
+```mermaid {theme: 'neutral', scale: 0.6}
+graph TB
+    subgraph app["Application Layer"]
+        PG[PostgreSQL<br/>write syscall]
+    end
+
+    subgraph fs["Filesystem Layer (ext4)"]
+        INODE[Inode Metadata]
+        JOURNAL[Journal]
+        DIRTY[Mark Dirty Pages]
+    end
+
+    subgraph cache["Page Cache (INVISIBLE TO CBT)"]
+        PC[Dirty Pages<br/>5-30 second window]
+        BDFLUSH[Background Flush<br/>bdflush/pdflush]
+    end
+
+    subgraph block["Block Device Layer (VISIBLE TO CBT)"]
+        BD[Raw Block I/O]
+        CBT[CBT Tracking]
+    end
+
+    PG --> INODE
+    INODE --> DIRTY
+    DIRTY --> PC
+    PC --> BDFLUSH
+    BDFLUSH --> BD
+    BD --> CBT
+
+    style cache fill:#f99,stroke:#333,stroke-width:3px
+    style CBT fill:#9f6,stroke:#333
+
+    classDef invisible fill:#f99,stroke:#333
+    class cache invisible
+```
+
+<v-clicks>
+
+### Why PostgreSQL Data Was Invisible
+
+1. **Page cache delay**: 5-30 seconds before flush
+2. **Filesystem fragmentation**: Data scattered across metadata, journal, data blocks
+3. **CBT sees raw blocks**: Mostly zeros and filesystem structures
+4. **Database data hidden**: Inside ext4 abstractions
+
+### Why Raw Block Writes Worked
+
+1. **Direct block I/O**: No filesystem layer
+2. **Immediate visibility**: No page cache delay
+3. **CBT sees exactly what was written**: 100 blocks of random data
+
+</v-clicks>
+
+</div>
+
+---
+layout: default
+---
+
+# Production Implications
+
+<v-clicks depth="2">
+
+## Using CBT in Production
+
+**Option 1: Raw Block Devices**
+- Databases with DirectIO (Cassandra, MongoDB, ScyllaDB)
+- Applications designed for block storage
+- ✅ Full CBT visibility
+
+**Option 2: Filesystem with Sync**
+- Custom backup agents trigger `sync` before snapshots
+- Force flush of dirty pages to disk
+- ⚠️ Adds latency, not guaranteed atomic
+
+**Option 3: Accept Limitations**
+- Use CBT for block-level tracking only
+- Understand filesystem changes may be delayed
+- ⚠️ Snapshot timing becomes critical
+
+## Key Takeaway
+
+**CBT requires `volumeMode: Block` for accurate change tracking** - this is why our demo uses raw block device writes instead of PostgreSQL for demonstration.
+
+</v-clicks>
+
+---
+layout: default
+---
+
 # CBT API Architecture (KEP-3314)
 
 <div grid="~ cols-2 gap-8" class="text-sm">
