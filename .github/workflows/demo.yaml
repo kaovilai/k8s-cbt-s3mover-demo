@@ -273,8 +273,8 @@ jobs:
 
           # Debug: Check if binary exists and works
           echo "Debug: Testing snapshot-metadata-lister binary..."
-          kubectl exec -n cbt-demo csi-client -- ls -lh /tools/snapshot-metadata-lister
-          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister -h 2>&1 || echo "Help command exited with: $?"
+          kubectl exec -n cbt-demo csi-client -c run-client -- ls -lh /tools/snapshot-metadata-lister
+          kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister -h 2>&1 || echo "Help command exited with: $?"
           echo ""
 
           # Debug: Check SnapshotMetadataService configuration
@@ -282,10 +282,19 @@ jobs:
           kubectl get snapshotmetadataservices -A -o yaml
           echo ""
 
+          # Debug: Check network connectivity to SnapshotMetadataService
+          echo "Debug: Checking network connectivity to SnapshotMetadataService..."
+          kubectl exec -n cbt-demo csi-client -c run-client -- nc -zv csi-snapshot-metadata.default 6443 2>&1 || {
+            echo "⚠ Cannot reach csi-snapshot-metadata.default:6443"
+            echo "Checking if service exists..."
+            kubectl get svc -n default csi-snapshot-metadata || echo "Service not found"
+          }
+          echo ""
+
           # Use the snapshot-metadata-lister to get allocated blocks
           echo "Calling lister with short flags (matching upstream pattern)..."
           echo "Command: /tools/snapshot-metadata-lister -s $SNAPSHOT_NAME -n cbt-demo"
-          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
+          kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
             -s "$SNAPSHOT_NAME" \
             -n cbt-demo 2>&1 | tee /tmp/lister-output.log || {
             EXIT_CODE=$?
@@ -389,7 +398,7 @@ jobs:
           echo "=========================================="
           echo ""
           echo "Testing GetMetadataDelta with snapshot names..."
-          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
+          kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
             -previous-snapshot postgres-snapshot-1 \
             -snapshot postgres-snapshot-2 \
             -namespace cbt-demo \
@@ -407,7 +416,7 @@ jobs:
           echo "=========================================="
           echo ""
           echo "Using -previous-snapshot-id flag with CSI snapshot handle..."
-          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
+          kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
             -previous-snapshot-id "$SNAP_HANDLE" \
             -snapshot postgres-snapshot-2 \
             -namespace cbt-demo \
