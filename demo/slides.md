@@ -81,14 +81,14 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 
 ```mermaid {scale:0.5}
 graph TB
-    PVC[PVC: PostgreSQL Data]
-    S1[Snapshot 1<br/>100 rows]
-    S2[Snapshot 2<br/>200 rows]
+    PVC[PVC: Block Device]
+    S1[Snapshot 1<br/>100 blocks]
+    S2[Snapshot 2<br/>200 blocks]
     CBT[CBT Engine]
     S3[S3 Backup<br/>Delta Only]
 
     PVC -->|Create| S1
-    PVC -->|Write +100 rows| S2
+    PVC -->|Write +100 blocks| S2
     S1 -->|Compare| CBT
     S2 -->|Compare| CBT
     CBT -->|~10MB delta| S3
@@ -434,9 +434,9 @@ layout: default
    - S3-compatible object storage
    - Backup target
 
-3. **PostgreSQL** workload
-   - Database for testing
-   - Block device PVC
+3. **Block Writer** workload
+   - Writes directly to raw block device
+   - Block device PVC (/dev/xvdb)
 
 4. **Snapshot Controller**
    - VolumeSnapshot CRDs
@@ -450,7 +450,7 @@ layout: default
 ```mermaid {theme: 'neutral', scale: 0.45}
 graph LR
     subgraph ns["cbt-demo namespace"]
-        PG[PostgreSQL]
+        BW[Block Writer]
         PVC[PVC<br/>Block]
         VS1[Snap-1]
         VS2[Snap-2]
@@ -462,7 +462,7 @@ graph LR
         SC[Snapshot<br/>Controller]
     end
 
-    PG -.->|Uses| PVC
+    BW -.->|Uses| PVC
     PVC -->|Create| VS1
     PVC -->|Create| VS2
     VS1 -->|CBT| CSI
@@ -484,7 +484,7 @@ Demo components walkthrough:
 - RIGHT: Walk through the mermaid diagram
 - CSI Driver: Note it includes both hostpath plugin AND snapshot-metadata sidecar
 - MinIO: S3-compatible storage, easier than setting up real S3
-- PostgreSQL: Original plan, but switched to block-writer due to filesystem limitations
+- Block Writer: Writes directly to raw block device /dev/xvdb, bypassing filesystem for CBT visibility
 - Snapshot Controller: Manages VolumeSnapshot lifecycle
 - Emphasize: Everything runs in a single namespace for simplicity
 -->
@@ -540,12 +540,12 @@ Setup phase - emphasize automation:
    ./scripts/02-deploy-minio.sh
    ```
 
-5. **Deploy PostgreSQL**
+5. **Deploy Block Writer**
    ```bash
    ./scripts/03-deploy-workload.sh
    ```
    - Creates block device PVC
-   - Initializes database with 100 rows
+   - Writes 100 blocks to raw device
 
 6. **Verify Setup**
    ```bash
@@ -559,7 +559,7 @@ Setup phase - emphasize automation:
 Workload deployment:
 - MinIO provides S3-compatible storage (easier than real S3 for demos)
 - Block-writer uses volumeMode: Block - emphasize this requirement
-- Initial data: 100 rows of PostgreSQL data (~10MB)
+- Initial data: 100 blocks written to raw device /dev/xvdb (~10MB)
 - Verification scripts ensure everything is working
 - This is the baseline for our CBT comparisons
 -->
@@ -622,9 +622,10 @@ Phase 3 - Full backup demonstration:
 
 ## Phase 4: GetMetadataDelta Demonstration
 
-10. **Insert Additional Data**
-    ```sql
-    INSERT INTO demo_data ... -- 100 more rows (~10MB)
+10. **Write Additional Data**
+    ```bash
+    dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100
+    # Writes 100 more blocks (~10MB)
     ```
 
 11. **Create Second Snapshot**
@@ -651,7 +652,7 @@ Phase 3 - Full backup demonstration:
 
 <!--
 Phase 4 - Incremental backup demonstration:
-- Insert 100 more rows to simulate application changes
+- Write 100 more blocks to raw device to simulate data changes
 - Second snapshot creation is similar speed (~3.7s)
 - Two ways to call GetMetadataDelta:
   1. Using snapshot names (simpler, but requires base snapshot to exist)
@@ -698,11 +699,9 @@ kubectl wait volumesnapshot block-snapshot-1 \
 ## Delta Snapshot
 
 First, create changes:
-```sql
-INSERT INTO demo_data (data_block, content, checksum)
-SELECT generate_series(101, 200),
-       encode(gen_random_bytes(100000), 'base64'),
-       md5(random()::text);
+```bash
+# Write 100 more blocks to raw device
+dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100 seek=100
 ```
 
 Then create second snapshot:
@@ -975,7 +974,7 @@ class: text-center
 
 <div class="text-xs">
 
-Checks: Snapshot checksums • Block-level consistency • PostgreSQL data • Backup metadata
+Checks: Snapshot checksums • Block-level consistency • Block device data • Backup metadata
 
 </div>
 
@@ -989,7 +988,7 @@ Checks: Snapshot checksums • Block-level consistency • PostgreSQL data • B
 
 | Check | Snapshot 1 | Snapshot 2 |
 |-------|-----------|-----------|
-| Rows | 100 | 200 |
+| Blocks | 100 | 200 |
 | Size | ~10MB | ~20MB |
 | Delta | - | ~10MB |
 | Checksum | ✓ MD5 | ✓ MD5 |
@@ -1149,15 +1148,15 @@ layout: default
 - **Snapshot Controller**: Deployed with v8.2.0 CRDs
 - **CSI Driver**: hostpath with **canary** tag + snapshot-metadata sidecar
 - **MinIO S3**: S3-compatible backup storage
-- **PostgreSQL**: StatefulSet with **2Gi block PVC**
+- **Block Writer**: Pod with **2Gi block PVC** (/dev/xvdb)
 - **csi-client pod**: snapshot-metadata-lister with RBAC
 
 ## Snapshot Performance
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
-| block-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
-| block-snapshot-2 | 200 rows (~20MB) | **~4s** | ✓ Ready |
+| block-snapshot-1 | 100 blocks (~10MB) | **~4s** | ✓ Ready |
+| block-snapshot-2 | 200 blocks (~20MB) | **~4s** | ✓ Ready |
 
 </v-clicks>
 
@@ -1168,7 +1167,7 @@ Actual results from CI run #87:
 - Full infrastructure deployed successfully in Minikube
 - Snapshot creation is very fast (~4s per snapshot)
 - Using canary builds for latest CBT features (PR #180)
-- Real data: 100 rows → 200 rows, ~10MB → ~20MB
+- Real data: 100 blocks → 200 blocks, ~10MB → ~20MB
 - Emphasize: This is a real, reproducible demo running in CI
 -->
 
@@ -1228,7 +1227,7 @@ class: text-center
 2. ✅ Changed block tracking between snapshots
 3. ✅ Efficient delta backup (~10MB vs ~20MB full)
 4. ✅ S3-compatible storage integration
-5. ✅ Real workload (PostgreSQL) testing
+5. ✅ Real workload (block-writer) testing
 6. ✅ Automated CI/CD validation
 
 ## Key Takeaway
@@ -1244,7 +1243,7 @@ Summary of achievements:
 - ✅ Demonstrated full CBT workflow end-to-end
 - ✅ Showed both GetMetadataAllocated and GetMetadataDelta APIs
 - ✅ Validated S3 storage integration
-- ✅ Tested with real PostgreSQL workload
+- ✅ Tested with real block-writer workload (raw block device writes)
 - ✅ Automated CI/CD validation
 - Key takeaway: CBT reduces backup time and storage by tracking only changes
 - Mention: This is alpha in K8s 1.33+, production CSI driver support coming
