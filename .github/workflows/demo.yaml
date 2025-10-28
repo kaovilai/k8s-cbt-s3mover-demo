@@ -272,6 +272,11 @@ jobs:
           kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister -h 2>&1 || echo "Help command exited with: $?"
           echo ""
 
+          # Debug: Check SnapshotMetadataService configuration
+          echo "Debug: Checking SnapshotMetadataService CR..."
+          kubectl get snapshotmetadataservices -A -o yaml
+          echo ""
+
           # Use the snapshot-metadata-lister to get allocated blocks
           echo "Calling lister with short flags (matching upstream pattern)..."
           echo "Command: /tools/snapshot-metadata-lister -s $SNAPSHOT_NAME -n cbt-demo"
