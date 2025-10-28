@@ -176,20 +176,20 @@ jobs:
           kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
           kubectl get pods -n cbt-demo -l app=minio
 
-      - name: Deploy PostgreSQL Workload
+      - name: Deploy Block Writer Workload
         run: |
-          echo "Deploying PostgreSQL workload with block PVC..."
+          echo "Deploying block-writer workload with block PVC..."
           ./scripts/03-deploy-workload.sh
 
-      - name: Verify PostgreSQL deployment
+      - name: Verify Block Writer deployment
         run: |
-          echo "Waiting for PostgreSQL pod..."
-          kubectl wait --for=condition=Ready pod -l app=postgres -n cbt-demo --timeout=300s || {
-            echo "PostgreSQL not ready, checking status..."
-            kubectl get pods -n cbt-demo -l app=postgres
-            kubectl describe pod -n cbt-demo -l app=postgres
+          echo "Waiting for block-writer pod..."
+          kubectl wait --for=condition=Ready pod/block-writer -n cbt-demo --timeout=120s || {
+            echo "Block-writer not ready, checking status..."
+            kubectl get pod block-writer -n cbt-demo
+            kubectl describe pod block-writer -n cbt-demo
             kubectl get pvc -n cbt-demo
-            kubectl describe pvc -n cbt-demo
+            kubectl describe pvc block-writer-data -n cbt-demo
           }
 
       - name: Run integrity checks
@@ -198,18 +198,48 @@ jobs:
           ./scripts/backup-status.sh || true
           ./scripts/integrity-check.sh || true
 
+      - name: Write Initial Data to Block Device
+        run: |
+          echo "=========================================="
+          echo "Writing Initial Data Pattern"
+          echo "=========================================="
+          echo ""
+          echo "Writing random data at specific offsets to simulate application writes"
+          echo "This matches the upstream test pattern and Red Hat's working example"
+          echo ""
+
+          # Write 5 blocks at seek positions 1, 3, 5, 7, 9 (matching Red Hat example)
+          echo "Writing block at offset 4KB (seek=1)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=1 conv=notrunc
+
+          echo "Writing block at offset 12KB (seek=3)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=3 conv=notrunc
+
+          echo "Writing block at offset 20KB (seek=5)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=5 conv=notrunc
+
+          echo "Writing block at offset 28KB (seek=7)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=7 conv=notrunc
+
+          echo "Writing block at offset 36KB (seek=9)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=9 conv=notrunc
+
+          echo ""
+          echo "✓ Written 5 blocks (20KB total) at offsets: 4KB, 12KB, 20KB, 28KB, 36KB"
+          echo ""
+
       - name: Create and test snapshots
         run: |
           echo "Creating first VolumeSnapshot..."
 
-          PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+          PVC_NAME="block-writer-data"
           echo "PVC Name: $PVC_NAME"
 
           cat <<EOF | kubectl apply -f -
           apiVersion: snapshot.storage.k8s.io/v1
           kind: VolumeSnapshot
           metadata:
-            name: postgres-snapshot-1
+            name: block-snapshot-1
             namespace: cbt-demo
           spec:
             volumeSnapshotClassName: csi-hostpath-snapclass
@@ -219,15 +249,15 @@ jobs:
 
           # Wait for snapshot to be ready (using kubectl wait with jsonpath - upstream best practice)
           echo "Waiting for snapshot 1 to be ready..."
-          kubectl wait volumesnapshot postgres-snapshot-1 -n cbt-demo \
+          kubectl wait volumesnapshot block-snapshot-1 -n cbt-demo \
             --for=jsonpath='{.status.readyToUse}'=true --timeout=300s || {
             echo "✗ Snapshot did not become ready within timeout"
-            kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo
-            kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
+            kubectl get volumesnapshot block-snapshot-1 -n cbt-demo
+            kubectl describe volumesnapshot block-snapshot-1 -n cbt-demo
             exit 1
           }
           echo "✓ Snapshot 1 is ready!"
-          kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o yaml
+          kubectl get volumesnapshot block-snapshot-1 -n cbt-demo -o yaml
 
       - name: Deploy Snapshot Metadata Lister
         run: |
@@ -264,8 +294,8 @@ jobs:
           echo ""
 
           # Get PVC name and snapshot info
-          PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].metadata.name}')
-          SNAPSHOT_NAME="postgres-snapshot-1"
+          PVC_NAME="block-writer-data"
+          SNAPSHOT_NAME="block-snapshot-1"
 
           echo "PVC: $PVC_NAME"
           echo "Snapshot: $SNAPSHOT_NAME"
@@ -317,10 +347,10 @@ jobs:
           echo ""
           echo "With a CBT-enabled CSI driver, this would show:"
           echo ""
-          echo "Volume Size:        10 GB  (total PVC size)"
-          echo "Allocated Blocks:   ~1 MB  (actual PostgreSQL data)"
-          echo "Data Transferred:   ~1 MB  (only allocated blocks)"
-          echo "Savings:            9.999 GB (99.99%)"
+          echo "Volume Size:        1 GB   (total PVC size)"
+          echo "Allocated Blocks:   20 KB  (5 blocks of random data)"
+          echo "Data Transferred:   20 KB  (only allocated blocks)"
+          echo "Savings:            ~1 GB  (99.998%)"
           echo ""
           echo "This demonstrates the power of Changed Block Tracking:"
           echo "- Only allocated blocks are transferred"
@@ -328,23 +358,46 @@ jobs:
           echo "- Incremental backups transfer only changed blocks"
           echo ""
 
+      - name: Write More Data for Incremental Backup
+        run: |
+          echo "=========================================="
+          echo "Writing Additional Data for Delta Demo"
+          echo "=========================================="
+          echo ""
+          echo "Writing more random data at different offsets to demonstrate incremental changes"
+          echo "This simulates application writes between backup snapshots"
+          echo ""
+
+          # Write 5 more blocks at different positions (matching Red Hat delta pattern)
+          echo "Writing block at offset 60KB (seek=15)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=15 conv=notrunc
+
+          echo "Writing block at offset 68KB (seek=17)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=17 conv=notrunc
+
+          echo "Writing block at offset 76KB (seek=19)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=19 conv=notrunc
+
+          echo "Writing block at offset 84KB (seek=21)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=21 conv=notrunc
+
+          echo "Writing block at offset 92KB (seek=23)..."
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=23 conv=notrunc
+
+          echo ""
+          echo "✓ Written 5 more blocks (20KB total) at new offsets: 60KB, 68KB, 76KB, 84KB, 92KB"
+          echo "Total data written across both writes: 10 blocks (40KB)"
+          echo ""
+
       - name: Create second snapshot for delta demo
         run: |
-          echo ""
-          echo "Writing additional data to PostgreSQL to create changed blocks..."
-          kubectl exec -n cbt-demo -it postgres-0 -- psql -U demo -d cbtdemo -c \
-            "INSERT INTO demo_data (data_block, content, checksum)
-             SELECT generate_series(101, 200),
-                    encode(gen_random_bytes(100000), 'base64'),
-                    md5(random()::text);" || echo "Note: Data insert may fail in non-block environments"
-
-          echo "Data written. Now creating second VolumeSnapshot for delta testing..."
+          echo "Creating second VolumeSnapshot for delta testing..."
 
           cat <<EOF | kubectl apply -f -
           apiVersion: snapshot.storage.k8s.io/v1
           kind: VolumeSnapshot
           metadata:
-            name: postgres-snapshot-2
+            name: block-snapshot-2
             namespace: cbt-demo
           spec:
             volumeSnapshotClassName: csi-hostpath-snapclass
@@ -354,11 +407,11 @@ jobs:
 
           # Wait for snapshot 2 to be ready
           echo "Waiting for snapshot 2 to be ready..."
-          kubectl wait volumesnapshot postgres-snapshot-2 -n cbt-demo \
+          kubectl wait volumesnapshot block-snapshot-2 -n cbt-demo \
             --for=jsonpath='{.status.readyToUse}'=true --timeout=300s || {
             echo "✗ Snapshot did not become ready within timeout"
-            kubectl get volumesnapshot postgres-snapshot-2 -n cbt-demo
-            kubectl describe volumesnapshot postgres-snapshot-2 -n cbt-demo
+            kubectl get volumesnapshot block-snapshot-2 -n cbt-demo
+            kubectl describe volumesnapshot block-snapshot-2 -n cbt-demo
             exit 1
           }
           echo "✓ Snapshot 2 is ready!"
@@ -371,11 +424,11 @@ jobs:
           echo ""
 
           # Get CSI snapshot handle from VolumeSnapshotContent
-          VSC_NAME=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath="{.status.boundVolumeSnapshotContentName}")
-          echo "VolumeSnapshotContent for VolumeSnapshot postgres-snapshot-1 is [$VSC_NAME]"
+          VSC_NAME=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+          echo "VolumeSnapshotContent for VolumeSnapshot block-snapshot-1 is [$VSC_NAME]"
 
           SNAP_HANDLE=$(kubectl get volumesnapshotcontent $VSC_NAME -o jsonpath="{.status.snapshotHandle}")
-          echo "CSI snapshot handle of VolumeSnapshot postgres-snapshot-1 is [$SNAP_HANDLE]"
+          echo "CSI snapshot handle of VolumeSnapshot block-snapshot-1 is [$SNAP_HANDLE]"
 
           echo ""
           echo "The snapshots now capture different states:"
@@ -389,8 +442,8 @@ jobs:
           echo ""
           echo "Testing GetMetadataDelta with snapshot names..."
           kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
-            -previous-snapshot postgres-snapshot-1 \
-            -snapshot postgres-snapshot-2 \
+            -previous-snapshot block-snapshot-1 \
+            -snapshot block-snapshot-2 \
             -namespace cbt-demo \
             -starting-offset 0 \
             -max-results 10 \
@@ -408,7 +461,7 @@ jobs:
           echo "Using -previous-snapshot-id flag with CSI snapshot handle..."
           kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
             -previous-snapshot-id "$SNAP_HANDLE" \
-            -snapshot postgres-snapshot-2 \
+            -snapshot block-snapshot-2 \
             -namespace cbt-demo \
             -starting-offset 0 \
             -max-results 10 \
@@ -419,8 +472,8 @@ jobs:
           }
           echo ""
           echo "Snapshot details:"
-          kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o yaml
-          kubectl get volumesnapshot postgres-snapshot-2 -n cbt-demo -o yaml
+          kubectl get volumesnapshot block-snapshot-1 -n cbt-demo -o yaml
+          kubectl get volumesnapshot block-snapshot-2 -n cbt-demo -o yaml
 
       - name: Test disaster recovery
         run: |
@@ -486,10 +539,10 @@ jobs:
 
           echo ""
           echo "========================================"
-          echo "PostgreSQL Logs:"
+          echo "Block Writer Logs:"
           echo "========================================"
-          kubectl logs -n cbt-demo -l app=postgres --tail=100 || true
-          kubectl describe pod -n cbt-demo -l app=postgres || true
+          kubectl logs -n cbt-demo block-writer --tail=100 || true
+          kubectl describe pod -n cbt-demo block-writer || true
 
           echo ""
           echo "========================================"

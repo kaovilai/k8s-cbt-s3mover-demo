@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: block-writer
+  namespace: cbt-demo
+  labels:
+    app: block-writer
+spec:
+  restartPolicy: Always
+  containers:
+  - name: writer
+    image: busybox:1.37.0
+    command:
+    - /bin/sh
+    - -c
+    - "tail -f /dev/null"
+    volumeDevices:
+    - name: data-volume
+      devicePath: /dev/xvda
+    securityContext:
+      privileged: true
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: block-writer-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: block-writer-data
+  namespace: cbt-demo
+spec:
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Block
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 1Gi
