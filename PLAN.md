@@ -109,8 +109,8 @@ k8s-cbt-s3mover-demo/
 │       └── Dockerfile
 ├── scripts/
 │   ├── 00-setup-cluster.sh            # Create Kind/Minikube cluster
-│   ├── 01-deploy-minio.sh             # Deploy MinIO
-│   ├── 02-deploy-csi-driver.sh        # Deploy hostpath driver with CBT
+│   ├── 01-deploy-csi-driver.sh        # Deploy hostpath driver with CBT
+│   ├── 02-deploy-minio.sh             # Deploy MinIO
 │   ├── 03-deploy-workload.sh          # Deploy PostgreSQL workload
 │   ├── 04-run-demo.sh                 # Full demo workflow
 │   ├── 05-simulate-disaster.sh        # Delete workload and PVC

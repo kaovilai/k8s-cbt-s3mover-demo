@@ -40,7 +40,7 @@ echo "[Step 1/8] Verifying remote cluster..."
 # Step 2: Deploy MinIO
 echo ""
 echo "[Step 2/8] Deploying MinIO S3 storage..."
-./scripts/01-deploy-minio.sh
+./scripts/02-deploy-minio.sh
 
 # Step 3: Install Snapshot CRDs (if not already installed)
 echo ""
@@ -69,7 +69,7 @@ read -r -p "Install CSI hostpath driver? (y/n): " INSTALL_CSI
 
 if [[ "$INSTALL_CSI" =~ ^[Yy]$ ]]; then
     echo "  Installing CSI hostpath driver..."
-    ./scripts/02-deploy-csi-driver.sh
+    ./scripts/01-deploy-csi-driver.sh
 else
     echo "  Skipping CSI driver installation"
     echo "  Make sure your cluster has a CSI driver with VolumeSnapshot support!"

@@ -91,7 +91,7 @@ RUN groupadd -f docker && usermod -aG docker node
 minikube start --driver=docker --container-runtime=containerd
 
 # Deploy your demo
-./scripts/02-deploy-csi-driver.sh
+./scripts/01-deploy-csi-driver.sh
 
 # Test block PVCs!
 kubectl apply -f manifests/workload/postgres-block.yaml

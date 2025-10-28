@@ -158,7 +158,7 @@ jobs:
           go build -o snapshot-metadata-verifier ./examples/snapshot-metadata-verifier/
 
       - name: Deploy CSI driver with CBT
-        run: ./scripts/02-deploy-csi-driver.sh
+        run: ./scripts/01-deploy-csi-driver.sh
 
       - name: Test block PVCs and CBT
         run: |

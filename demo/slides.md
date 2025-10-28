@@ -243,7 +243,7 @@ layout: default
 
 3. **Deploy CSI Driver with CBT**
    ```bash
-   ./scripts/02-deploy-csi-driver.sh
+   ./scripts/01-deploy-csi-driver.sh
    ```
    - Installs `SnapshotMetadataService` CRD
    - Enables CBT API
@@ -260,7 +260,7 @@ layout: default
 
 4. **Deploy MinIO S3 Storage**
    ```bash
-   ./scripts/01-deploy-minio.sh
+   ./scripts/02-deploy-minio.sh
    ```
 
 5. **Deploy PostgreSQL**
@@ -558,7 +558,7 @@ Note: CBT API is currently in alpha and subject to change
 
 **Enhancement**: Allows base snapshot deletion after getting handle
 
-**Status**: ⚠️ PR #180 not yet merged into deployed version
+**Status**: ✅ Available in canary build (merged Oct 15, 2025)
 
 ```bash
 # Get CSI snapshot handle from VolumeSnapshotContent
@@ -568,13 +568,12 @@ HANDLE=$(kubectl get volumesnapshotcontent $VSC \
   -o jsonpath="{.status.snapshotHandle}")
 
 # Call API with CSI handle instead of snapshot name
-# Flag -P not yet available in current snapshot-metadata-lister
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
   -P "$HANDLE" -s postgres-snapshot-2 -n cbt-demo
 ```
 
-Will report **only changed blocks** (100 new rows, ~10MB) when available
+Reports **only changed blocks** (100 new rows, ~10MB)
 
 </v-clicks>
 
@@ -817,7 +816,7 @@ layout: default
 
 <div class="text-sm">
 
-**Latest Successful Run**: #18799045590 - Completed in **5m 9s**
+**Latest Successful Run**: #18855407039 - Completed in **6m 12s**
 
 <v-clicks>
 
@@ -859,12 +858,13 @@ layout: default
 - **Current Limitation**: CSI hostpath driver does not implement SnapshotMetadataService gRPC endpoint, so no metadata is returned
 - **Expected**: With a production CSI driver that implements CBT, these calls would return block metadata
 
-## Known Issue (Latest Run #18799069219)
+## Recent Improvements
 
-⚠️ **Go Version Incompatibility**: Build fails with Go 1.24.0 requirement
-- Error: `go: requires go >= 1.24.0 (running go 1.23.4)`
-- Impact: snapshot-metadata-lister pod enters CrashLoopBackOff
-- Fix: Update golang image version or pin snapshot-metadata-lister to compatible release
+✅ **Canary Build Deployment**: Now using latest upstream builds
+- Image: `gcr.io/k8s-staging-sig-storage/csi-snapshot-metadata:canary`
+- Includes merged PR #180 (CSI handle support)
+- Follows official external-snapshot-metadata integration test pattern
+- TLS-secured gRPC endpoint on port 6443
 
 </v-clicks>
 
@@ -911,8 +911,8 @@ layout: default
 git clone <repo-url>
 
 # Run the demo locally
-./scripts/01-deploy-minio.sh
-./scripts/02-deploy-csi-driver.sh
+./scripts/01-deploy-csi-driver.sh
+./scripts/02-deploy-minio.sh
 ./scripts/03-deploy-workload.sh
 
 # Create snapshots

@@ -19,8 +19,8 @@ The Kubernetes Changed Block Tracking (CBT) demo project is now **functionally c
 
 #### Setup Scripts
 - ✅ `00-setup-cluster.sh` - Creates Kind cluster
-- ✅ `01-deploy-minio.sh` - Deploys MinIO
-- ✅ `02-deploy-csi-driver.sh` - Deploys CSI driver with CBT
+- ✅ `01-deploy-csi-driver.sh` - Deploys CSI driver with CBT
+- ✅ `02-deploy-minio.sh` - Deploys MinIO
 - ✅ `03-deploy-workload.sh` - Deploys PostgreSQL + data
 
 #### Demo Workflow Scripts
@@ -83,8 +83,8 @@ Located in [`tools/cbt-backup/`](tools/cbt-backup/)
 ```bash
 # Setup (5 minutes)
 ./scripts/00-setup-cluster.sh
-./scripts/01-deploy-minio.sh
-./scripts/02-deploy-csi-driver.sh
+./scripts/01-deploy-csi-driver.sh
+./scripts/02-deploy-minio.sh
 ./scripts/03-deploy-workload.sh
 
 # Run complete demo workflow (2 minutes)
@@ -295,8 +295,8 @@ The backup tool is fully functional for metadata operations but needs block data
 git clone <repo>
 cd k8s-cbt-s3mover-demo
 ./scripts/00-setup-cluster.sh
-./scripts/01-deploy-minio.sh
-./scripts/02-deploy-csi-driver.sh
+./scripts/01-deploy-csi-driver.sh
+./scripts/02-deploy-minio.sh
 ./scripts/03-deploy-workload.sh
 ./scripts/04-run-demo.sh
 ```

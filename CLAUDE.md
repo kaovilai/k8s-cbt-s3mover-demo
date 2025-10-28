@@ -67,8 +67,8 @@ shellcheck scripts/*.sh
 
 # Manual step-by-step setup
 ./scripts/00-setup-cluster.sh          # Create Minikube cluster
-./scripts/01-deploy-minio.sh           # Deploy MinIO S3
-./scripts/02-deploy-csi-driver.sh      # Deploy CSI driver with CBT
+./scripts/01-deploy-csi-driver.sh      # Deploy CSI driver with CBT
+./scripts/02-deploy-minio.sh           # Deploy MinIO S3
 ./scripts/03-deploy-workload.sh        # Deploy PostgreSQL + data
 ./scripts/04-run-demo.sh               # Run demo workflow
 

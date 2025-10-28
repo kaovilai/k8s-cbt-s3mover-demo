@@ -25,8 +25,8 @@
 ### Automation Scripts (100%)
 - [x] `00-setup-cluster.sh` - Creates Minikube cluster
 - [x] `00-setup-remote-cluster.sh` - Remote cluster setup
-- [x] `01-deploy-minio.sh` - Deploys MinIO S3 storage
-- [x] `02-deploy-csi-driver.sh` - Deploys CSI driver with CBT
+- [x] `01-deploy-csi-driver.sh` - Deploys CSI driver with CBT
+- [x] `02-deploy-minio.sh` - Deploys MinIO S3 storage
 - [x] `03-deploy-workload.sh` - Deploys PostgreSQL + data
 - [x] `04-run-demo.sh` - Complete end-to-end demo
 - [x] `05-simulate-disaster.sh` - Disaster simulation
@@ -198,8 +198,8 @@ You can already:
 1. **Setup the infrastructure**:
    ```bash
    ./scripts/00-setup-cluster.sh
-   ./scripts/01-deploy-minio.sh
-   ./scripts/02-deploy-csi-driver.sh
+   ./scripts/01-deploy-csi-driver.sh
+   ./scripts/02-deploy-minio.sh
    ./scripts/03-deploy-workload.sh
    ```
 

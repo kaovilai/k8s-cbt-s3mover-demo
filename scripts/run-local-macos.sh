@@ -138,29 +138,29 @@ fi
 # Switch to the cluster context
 kubectl config use-context kind-cbt-demo
 
-# Step 3: Deploy MinIO
+# Step 3: Deploy CSI Driver
 echo ""
 echo "=========================================="
-echo "Step 3: Deploying MinIO S3 Storage"
+echo "Step 3: Deploying CSI Driver with CBT"
 echo "=========================================="
 
-if ./scripts/01-deploy-minio.sh; then
-    echo -e "${GREEN}✓ MinIO deployed${NC}"
-else
-    echo -e "${RED}✗ MinIO deployment failed${NC}"
-    exit 1
-fi
-
-# Step 4: Deploy CSI Driver
-echo ""
-echo "=========================================="
-echo "Step 4: Deploying CSI Driver with CBT"
-echo "=========================================="
-
-if ./scripts/02-deploy-csi-driver.sh; then
+if ./scripts/01-deploy-csi-driver.sh; then
     echo -e "${GREEN}✓ CSI driver deployed${NC}"
 else
     echo -e "${RED}✗ CSI driver deployment failed${NC}"
+    exit 1
+fi
+
+# Step 4: Deploy MinIO
+echo ""
+echo "=========================================="
+echo "Step 4: Deploying MinIO S3 Storage"
+echo "=========================================="
+
+if ./scripts/02-deploy-minio.sh; then
+    echo -e "${GREEN}✓ MinIO deployed${NC}"
+else
+    echo -e "${RED}✗ MinIO deployment failed${NC}"
     exit 1
 fi
 

@@ -128,18 +128,8 @@ If you prefer step-by-step control:
 ```
 
 ```bash
-# 2. Deploy MinIO for backup storage
-./scripts/01-deploy-minio.sh
-```
-
-Access MinIO:
-- **API**: http://localhost:30900
-- **Console**: http://localhost:30901
-- **Credentials**: minioadmin / minioadmin123
-
-```bash
-# 3. Deploy hostpath CSI driver with Changed Block Tracking support
-./scripts/02-deploy-csi-driver.sh
+# 2. Deploy hostpath CSI driver with Changed Block Tracking support
+./scripts/01-deploy-csi-driver.sh
 ```
 
 This deploys (following upstream external-snapshot-metadata integration test pattern):
@@ -154,6 +144,16 @@ This deploys (following upstream external-snapshot-metadata integration test pat
 - ✅ TLS-secured gRPC endpoint (`csi-snapshot-metadata.default:6443`)
 - ✅ Uses upstream staging registry images (`gcr.io/k8s-staging-sig-storage`)
 - ✅ Matches official external-snapshot-metadata integration tests
+
+```bash
+# 3. Deploy MinIO for backup storage
+./scripts/02-deploy-minio.sh
+```
+
+Access MinIO:
+- **API**: http://localhost:30900
+- **Console**: http://localhost:30901
+- **Credentials**: minioadmin / minioadmin123
 
 ```bash
 # 4. Deploy PostgreSQL with block-mode PVC

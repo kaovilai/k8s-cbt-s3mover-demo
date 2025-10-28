@@ -28,8 +28,8 @@ cd k8s-cbt-s3mover-demo
 ```bash
 # This will take ~3-5 minutes
 ./scripts/00-setup-cluster.sh     # Creates Kind cluster (~60s)
-./scripts/01-deploy-minio.sh      # Deploys MinIO (~30s)
-./scripts/02-deploy-csi-driver.sh # Deploys CSI driver with CBT (~60s)
+./scripts/01-deploy-csi-driver.sh # Deploys CSI driver with CBT (~60s)
+./scripts/02-deploy-minio.sh      # Deploys MinIO (~30s)
 ./scripts/03-deploy-workload.sh   # Deploys PostgreSQL + data (~120s)
 ```
 
@@ -317,8 +317,8 @@ To start fresh:
 ./scripts/cleanup.sh
 # Wait for cleanup to complete
 ./scripts/00-setup-cluster.sh
-./scripts/01-deploy-minio.sh
-./scripts/02-deploy-csi-driver.sh
+./scripts/01-deploy-csi-driver.sh
+./scripts/02-deploy-minio.sh
 ./scripts/03-deploy-workload.sh
 ```
 

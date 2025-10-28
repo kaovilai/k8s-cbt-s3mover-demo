@@ -120,7 +120,7 @@ if [ "$PODS" -eq 0 ]; then
 fi
 ```
 
-### 4. MinIO Deployment ([scripts/01-deploy-minio.sh](scripts/01-deploy-minio.sh))
+### 4. MinIO Deployment ([scripts/02-deploy-minio.sh](scripts/02-deploy-minio.sh))
 
 #### Pod Creation Waiting
 - **Problem**: kubectl wait fails if MinIO pod doesn't exist
@@ -243,5 +243,5 @@ These improvements address common issues in CI/CD environments:
 - [.github/workflows/demo.yaml](.github/workflows/demo.yaml) - Main CI/CD workflow
 - [manifests/csi-driver/deploy-with-cbt.sh](manifests/csi-driver/deploy-with-cbt.sh) - CSI driver deployment
 - [scripts/validate-cbt.sh](scripts/validate-cbt.sh) - CBT validation
-- [scripts/01-deploy-minio.sh](scripts/01-deploy-minio.sh) - MinIO deployment
+- [scripts/02-deploy-minio.sh](scripts/02-deploy-minio.sh) - MinIO deployment
 - [scripts/03-deploy-workload.sh](scripts/03-deploy-workload.sh) - PostgreSQL deployment
