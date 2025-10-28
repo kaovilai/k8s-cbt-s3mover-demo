@@ -11,6 +11,11 @@ name: K8s CBT S3Mover Demo
 #    - Enables testing on production-like environments
 #    - Example: cat ~/.kube/config | base64 | pbcopy
 #
+# For local testing:
+# - Automated (all-in-one): ./scripts/run-local-minikube.sh --non-interactive
+# - Manual (step-by-step): Follow individual steps below
+# - Requires: Minikube with VM driver (Docker Desktop or QEMU), not Podman
+#
 # See README.md for details
 
 on:

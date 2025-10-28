@@ -14,8 +14,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Note: This script requires GNU sed on macOS. Install via Homebrew:
+#   brew install gnu-sed
+#
+# Then add the "gnubin" directory to your PATH in your shell rc file:
+#   PATH="$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:$PATH"
+
 set -e
 set -x
+
+# Check for GNU sed on macOS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if ! sed --version 2>/dev/null | grep -q "GNU sed"; then
+        echo "Error: GNU sed is required on macOS but not found in PATH"
+        echo ""
+        echo "Install GNU sed with Homebrew:"
+        echo "  brew install gnu-sed"
+        echo ""
+        echo "Then add to your PATH in ~/.bashrc or ~/.zshrc:"
+        echo "  PATH=\"\$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:\$PATH\""
+        echo ""
+        exit 1
+    fi
+fi
 
 TEMP_DIR="$(mktemp -d)"
 

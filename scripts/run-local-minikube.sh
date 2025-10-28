@@ -1,6 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
+# Parse arguments
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --non-interactive|-y)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --non-interactive, -y    Run without interactive prompts"
+            echo "  --help, -h              Show this help message"
+            echo ""
+            echo "Example:"
+            echo "  $0 --non-interactive    # Run automated setup"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 echo "=========================================="
 echo "K8s CBT Demo - Minikube with Block Devices"
 echo "=========================================="
@@ -20,7 +47,12 @@ echo "  6. Run demo workflow with snapshots"
 echo ""
 echo "⚠️  Note: Minikube is slower than Kind but supports block devices"
 echo ""
-read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+
+if [ "$NON_INTERACTIVE" = false ]; then
+    read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+else
+    echo "Running in non-interactive mode..."
+fi
 
 # Function to check if command exists
 command_exists() {
@@ -136,12 +168,17 @@ echo "=========================================="
 # Check if minikube is already running
 if minikube status --profile cbt-demo >/dev/null 2>&1; then
     echo -e "${YELLOW}⚠${NC} Minikube cluster 'cbt-demo' already exists"
-    read -r -p "Delete and recreate? (y/N): " response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        echo "Deleting existing cluster..."
-        minikube delete --profile cbt-demo
+    if [ "$NON_INTERACTIVE" = false ]; then
+        read -r -p "Delete and recreate? (y/N): " response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            echo "Deleting existing cluster..."
+            minikube delete --profile cbt-demo
+        else
+            echo "Using existing cluster"
+        fi
     else
-        echo "Using existing cluster"
+        echo "Non-interactive mode: Deleting and recreating cluster..."
+        minikube delete --profile cbt-demo
     fi
 fi
 
@@ -176,8 +213,28 @@ echo "Verifying cluster..."
 kubectl cluster-info
 kubectl get nodes
 
+# Detect if using Podman and warn about block device limitations
 echo ""
-echo -e "${BLUE}ℹ${NC} Minikube provides full block device support via VM"
+if minikube profile list 2>/dev/null | grep -q "podman"; then
+    echo -e "${YELLOW}⚠️  WARNING: Podman Driver Detected${NC}"
+    echo -e "${YELLOW}─────────────────────────────────────${NC}"
+    echo ""
+    echo "Minikube is using the Podman driver, which has limitations with block-mode volumes:"
+    echo "  • Loop device creation fails (needed for volumeMode: Block)"
+    echo "  • This affects CBT demonstrations which require block volumes"
+    echo ""
+    echo "Recommended alternatives for full block device support:"
+    echo "  1. Docker Desktop: Install and start Docker Desktop, then re-run with --driver=docker"
+    echo "  2. QEMU: Install qemu-system-aarch64, then re-run with --driver=qemu"
+    echo "     brew install qemu"
+    echo "  3. Cloud Cluster: Use EKS/GKE/AKS for production-like testing"
+    echo "  4. CI/CD: The GitHub Actions workflow works correctly (see .github/workflows/demo.yaml)"
+    echo ""
+    echo -e "${YELLOW}Continuing with setup, but PostgreSQL workload may fail...${NC}"
+    echo ""
+else
+    echo -e "${BLUE}ℹ${NC} Minikube provides full block device support via VM"
+fi
 
 # Step 3: Install VolumeSnapshot CRDs
 echo ""

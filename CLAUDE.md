@@ -255,11 +255,17 @@ All workload PVCs in this demo use block mode.
 
 ### Environment Constraints
 
-- **Minikube**: Full support (VM-based, used by upstream CI)
+- **Minikube with VM drivers (Docker Desktop, QEMU)**: Full support (VM-based, used by upstream CI)
+- **Minikube with Podman**: LIMITED support (experimental driver, loop device issues with block volumes)
 - **Kind**: NOT supported (container-based limitations with loop devices)
 - **EKS/GKE/AKS**: Full support (production environments)
 
-The CSI hostpath driver requires actual block device support, which Kind cannot provide.
+The CSI hostpath driver requires actual block device support for volumeMode: Block. Container-based environments (Kind, Podman) cannot provide reliable loop device support needed for block-mode PVCs. Use VM-based drivers (Docker Desktop with HyperKit/Virtualization.framework, QEMU) or cloud clusters for full functionality.
+
+**macOS Note**: Requires GNU sed for deployment scripts. Install with `brew install gnu-sed` and add to PATH:
+```bash
+PATH="$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:$PATH"
+```
 
 ### CI/CD Workflows
 
