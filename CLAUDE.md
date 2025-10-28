@@ -19,7 +19,7 @@ The system consists of three main components:
 
 1. **Infrastructure Layer**: Minikube cluster with CSI hostpath driver supporting CBT metadata APIs (GetMetadataAllocated, GetMetadataDelta)
 2. **Storage Layer**: MinIO S3 storage for backup metadata and block data
-3. **Application Layer**: PostgreSQL workload with block-mode PVC as demonstration target
+3. **Application Layer**: Block-writer workload with raw block device access for CBT demonstration
 
 **Data Flow:**
 - Initial backup: GetMetadataAllocated() → identifies allocated blocks → upload to S3
@@ -69,7 +69,7 @@ shellcheck scripts/*.sh
 ./scripts/00-setup-cluster.sh          # Create Minikube cluster
 ./scripts/01-deploy-csi-driver.sh      # Deploy CSI driver with CBT
 ./scripts/02-deploy-minio.sh           # Deploy MinIO S3
-./scripts/03-deploy-workload.sh        # Deploy PostgreSQL + data
+./scripts/03-deploy-workload.sh        # Deploy block-writer workload
 ./scripts/04-run-demo.sh               # Run demo workflow
 
 # Remote cluster setup
@@ -110,13 +110,13 @@ kubectl get snapshotmetadataservices -A
 cd tools/cbt-backup
 
 # Full backup (uses GetMetadataAllocated)
-./cbt-backup create --pvc postgres-data-postgres-0 --namespace cbt-demo
+./cbt-backup create --pvc block-writer-data --namespace cbt-demo
 
 # Incremental backup (uses GetMetadataDelta)
 ./cbt-backup create \
-  --pvc postgres-data-postgres-0 \
-  --snapshot postgres-snapshot-2 \
-  --base-snapshot postgres-snapshot-1 \
+  --pvc block-writer-data \
+  --snapshot block-snapshot-2 \
+  --base-snapshot block-snapshot-1 \
   --namespace cbt-demo
 
 # List backups from S3
@@ -171,7 +171,7 @@ Scripts are numbered for execution order:
     - `csi-snapshot-metadata-tls-secret.yaml`: TLS secret template (created by script)
   - `storage-class.yaml`: StorageClass for CSI hostpath driver
   - `snapshot-class.yaml`: VolumeSnapshotClass for snapshots
-- `manifests/workload/`: PostgreSQL StatefulSet with block-mode PVC, data initialization job
+- `manifests/workload/`: Block-writer pod with block-mode PVC for raw device access
 
 ## Important Implementation Details
 

@@ -397,13 +397,19 @@ type BlockMetadata struct {
   - Client tools now support both `-p <name>` and `-P <csi-handle>` flags
   - CSI handle approach is preferred for production use
 
-### Why Block Mode Volumes Are Required
+### Why Direct Block Device Access Is Required (Not Just `volumeMode: Block`)
 
-**Critical Understanding**: CBT operates at the **raw block device layer**, not the filesystem layer. This creates a fundamental visibility barrier when using filesystem-mode volumes.
+**Critical Understanding**: CBT operates at the **raw block device layer**, not the filesystem layer. This creates a fundamental visibility barrier when applications write through a filesystem - **even when using `volumeMode: Block` PVCs**.
+
+**Important Clarification**:
+- `volumeMode: Block` only controls how Kubernetes **exposes** the volume to the pod (as `/dev/xvda` instead of a mounted filesystem path like `/var/lib/postgresql/data`)
+- It does NOT prevent applications from **creating their own filesystem** on top of that block device
+- PostgreSQL, MySQL, and most databases will format the block device with ext4/xfs and write through that filesystem
+- **CBT requires the application to write directly to the raw block device**, bypassing all filesystem layers
 
 #### Filesystem Writes Remain Invisible Due to Multiple Abstraction Layers
 
-When applications write data through a filesystem (like ext4, xfs, or NTFS), those writes traverse multiple kernel abstraction layers before reaching the block device:
+When applications write data through a filesystem (like ext4, xfs, or NTFS), those writes traverse multiple kernel abstraction layers before reaching the block device - **regardless of whether the PVC is `volumeMode: Block` or `volumeMode: Filesystem`**:
 
 **1. Page Cache and Buffer Cache: The Primary Invisibility Barrier**
 
@@ -486,7 +492,7 @@ In our testing with PostgreSQL + ext4:
 kubectl exec postgres-0 -- psql -U postgres -c "INSERT INTO demo_data ..."
 
 # Created snapshot
-kubectl create -f postgres-snapshot-1.yaml
+kubectl create -f block-snapshot-1.yaml
 
 # Checked raw snapshot file in CSI driver
 kubectl exec csi-hostpathplugin-0 -- \

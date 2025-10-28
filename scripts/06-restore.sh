@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAMESPACE="${1:-cbt-demo}"
-SNAPSHOT_NAME="${2:-postgres-snapshot-3}"  # Default to latest snapshot
+SNAPSHOT_NAME="${2:-block-snapshot-3}"  # Default to latest snapshot
 
 echo "=========================================="
 echo "Restore from Snapshot"
@@ -148,9 +148,9 @@ echo "✓ StatefulSet created with snapshot restore"
 # Wait for PostgreSQL to be ready
 echo ""
 echo "[2/3] Waiting for PostgreSQL to be ready..."
-kubectl wait --for=condition=Ready pod -l app=postgres -n "$NAMESPACE" --timeout=300s
+kubectl wait --for=condition=Ready pod -l app=block-writer -n "$NAMESPACE" --timeout=300s
 
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
 echo "✓ PostgreSQL pod is ready: $POSTGRES_POD"
 
 # Verify data

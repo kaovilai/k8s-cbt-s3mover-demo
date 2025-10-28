@@ -208,12 +208,12 @@ The workflow files now demonstrate **both CBT APIs**:
 When the snapshot-metadata-lister/verifier tools become available, they can demonstrate:
 
 **1. GetMetadataAllocated** - List all allocated blocks in a snapshot:
-- `-s postgres-snapshot-1` (shows all blocks with initial 100 rows)
+- `-s block-snapshot-1` (shows all blocks with initial 100 rows)
 - This is used for initial full backups to avoid backing up empty space
 
 **2. GetMetadataDelta** - List changed blocks between snapshots:
-- `-p postgres-snapshot-1 -s postgres-snapshot-2` (before PR #180, using snapshot names)
-- `-P <csi-handle> -s postgres-snapshot-2` (after PR #180, using CSI handle - preferred)
+- `-p block-snapshot-1 -s block-snapshot-2` (before PR #180, using snapshot names)
+- `-P <csi-handle> -s block-snapshot-2` (after PR #180, using CSI handle - preferred)
 - This is used for incremental backups to backup only changed data
 
 The tools should report the changed blocks corresponding to the data written between the two snapshots.

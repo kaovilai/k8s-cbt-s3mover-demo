@@ -198,7 +198,7 @@ Here's what works where:
 |---------|-------------|---------------|-----------|
 | Filesystem PVCs | ✅ | ✅ | ✅ |
 | Block PVCs | ❌ | ✅ | ✅ |
-| PostgreSQL workload | ✅ | ✅ | ✅ |
+| block-writer workload | ✅ | ✅ | ✅ |
 | Raw block devices | ❌ | ✅ | ✅ |
 | CBT metadata tools | ⚠️ | ✅ | ✅ |
 | PR #180 features | ⚠️ | ✅ | ✅ |

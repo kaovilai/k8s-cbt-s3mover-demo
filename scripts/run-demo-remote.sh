@@ -84,9 +84,9 @@ echo "[Step 5/8] Validating CBT setup..."
     echo "  This is expected if you're using your cluster's native CSI driver"
 }
 
-# Step 6: Deploy PostgreSQL workload
+# Step 6: Deploy block-writer workload
 echo ""
-echo "[Step 6/8] Deploying PostgreSQL workload..."
+echo "[Step 6/8] Deploying block-writer workload..."
 ./scripts/03-deploy-workload.sh
 
 # Step 7: Check backup status

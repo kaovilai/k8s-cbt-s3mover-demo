@@ -130,7 +130,7 @@ cd tools/cbt-backup
 go build -o cbt-backup ./cmd
 
 # Create a backup (creates snapshot + metadata)
-./cbt-backup create --pvc postgres-data-postgres-0
+./cbt-backup create --pvc block-writer-data
 
 # List backups
 ./cbt-backup list
@@ -149,7 +149,7 @@ metadata:
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
   source:
-    persistentVolumeClaimName: postgres-data-postgres-0
+    persistentVolumeClaimName: block-writer-data
 EOF
 
 # Check status
@@ -185,7 +185,7 @@ The complete demo showcases:
    - Kind cluster with CBT support
    - MinIO S3 storage
    - CSI driver with SnapshotMetadata service
-   - PostgreSQL workload with 1000 data blocks
+   - block-writer workload with 1000 data blocks
 
 2. **Snapshot Creation**
    - Snapshot 1: Baseline (1000 blocks)

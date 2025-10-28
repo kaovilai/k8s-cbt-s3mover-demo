@@ -12,7 +12,7 @@ EXIT_CODE=0
 # Check PostgreSQL pod
 echo ""
 echo "[1/5] Checking PostgreSQL pod..."
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
 if [ -z "$POSTGRES_POD" ]; then
     echo "✗ PostgreSQL pod not found"

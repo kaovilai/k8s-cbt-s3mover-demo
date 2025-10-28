@@ -70,7 +70,7 @@ metadata:
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
   source:
-    persistentVolumeClaimName: postgres-data-postgres-0
+    persistentVolumeClaimName: block-writer-data
 EOF
 
 # Wait for it to be ready
@@ -100,27 +100,24 @@ kubectl get volumesnapshot -n cbt-demo my-first-snapshot
 kubectl port-forward -n cbt-demo svc/minio 9000:9000 9001:9001
 ```
 
-### Query the Database
+### Inspect Block Device
 
 ```bash
-# Connect to PostgreSQL
-kubectl exec -it -n cbt-demo postgres-0 -- psql -U demo -d cbtdemo
+# Connect to block-writer pod
+kubectl exec -it -n cbt-demo block-writer -- sh
 
-# Inside psql:
-# Show table info
-\dt
+# Inside the pod:
+# Show device info
+blockdev --getsize64 /dev/xvda
 
-# Count rows
-SELECT COUNT(*) FROM demo_data;
+# Check for non-zero blocks (sample a few positions)
+dd if=/dev/xvda bs=4K count=1 skip=1 2>/dev/null | od -An -tx1 | head -5
 
-# Show sample data
-SELECT * FROM demo_data LIMIT 5;
-
-# Check table size
-SELECT pg_size_pretty(pg_total_relation_size('demo_data'));
+# Sample different positions to see written data
+dd if=/dev/xvda bs=4K count=1 skip=3 2>/dev/null | od -An -tx1 | head -5
 
 # Exit
-\q
+exit
 ```
 
 ## 📊 Monitor the Demo
@@ -135,7 +132,7 @@ kubectl get pods -n cbt-demo --watch
 
 ```bash
 # PostgreSQL logs
-kubectl logs -n cbt-demo postgres-0 --tail=50
+kubectl logs -n cbt-demo block-writer --tail=50
 
 # MinIO logs
 kubectl logs -n cbt-demo -l app=minio --tail=50
@@ -185,8 +182,8 @@ kubectl get namespace cbt-demo
 # MinIO for S3 storage
 kubectl get deployment,service,pvc -n cbt-demo -l app=minio
 
-# PostgreSQL workload
-kubectl get statefulset,service,pvc -n cbt-demo -l app=postgres
+# block-writer workload
+kubectl get statefulset,service,pvc -n cbt-demo -l app=block-writer
 
 # CSI Driver (in default namespace)
 kubectl get pods -n default -l app=csi-hostpathplugin
@@ -211,15 +208,15 @@ SIZE:.spec.resources.requests.storage
 
 ## 📝 Common Operations
 
-### Add More Data to PostgreSQL
+### Write More Data to Block Device
 
 ```bash
-kubectl exec -n cbt-demo postgres-0 -- psql -U demo -d cbtdemo -c "
-INSERT INTO demo_data (data_block, content, checksum)
-SELECT generate_series(1001, 1100),
-       encode(gen_random_bytes(100000), 'base64'),
-       md5(random()::text);
-"
+# Write additional random data at different block offsets for incremental backup demo
+kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=15 conv=notrunc
+kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=17 conv=notrunc
+kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=19 conv=notrunc
+kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=21 conv=notrunc
+kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=1 seek=23 conv=notrunc
 ```
 
 ### Create Additional Snapshots
@@ -230,12 +227,12 @@ kubectl apply -f - <<EOF
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-2
+  name: block-snapshot-2
   namespace: cbt-demo
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
   source:
-    persistentVolumeClaimName: postgres-data-postgres-0
+    persistentVolumeClaimName: block-writer-data
 EOF
 ```
 

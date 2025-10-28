@@ -217,7 +217,7 @@ You can already:
    ```bash
    cd tools/cbt-backup
    go build -o cbt-backup ./cmd
-   ./cbt-backup create --pvc postgres-data-postgres-0
+   ./cbt-backup create --pvc block-writer-data
    ./cbt-backup list
    ```
 
@@ -227,12 +227,12 @@ You can already:
    apiVersion: snapshot.storage.k8s.io/v1
    kind: VolumeSnapshot
    metadata:
-     name: postgres-snapshot-1
+     name: block-snapshot-1
      namespace: cbt-demo
    spec:
      volumeSnapshotClassName: csi-hostpath-snapclass
      source:
-       persistentVolumeClaimName: postgres-data-postgres-0
+       persistentVolumeClaimName: block-writer-data
    EOF
    ```
 

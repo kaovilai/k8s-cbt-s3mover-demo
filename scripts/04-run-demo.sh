@@ -29,7 +29,7 @@ if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     exit 1
 fi
 
-if ! kubectl get pod -n "$NAMESPACE" -l app=postgres --no-headers | grep -q Running; then
+if ! kubectl get pod -n "$NAMESPACE" -l app=block-writer --no-headers | grep -q Running; then
     echo "Error: PostgreSQL pod is not running"
     exit 1
 fi
@@ -37,7 +37,7 @@ fi
 echo "✓ Infrastructure is ready"
 
 # Get PostgreSQL pod name
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
 PVC_NAME="postgres-data-$POSTGRES_POD"
 
 echo "  PostgreSQL Pod: $POSTGRES_POD"
@@ -56,7 +56,7 @@ kubectl apply -f - <<EOF
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-1
+  name: block-snapshot-1
   namespace: $NAMESPACE
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
@@ -66,9 +66,9 @@ EOF
 
 echo "  Waiting for snapshot to be ready..."
 kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
-  volumesnapshot/postgres-snapshot-1 -n "$NAMESPACE" --timeout=300s
+  volumesnapshot/block-snapshot-1 -n "$NAMESPACE" --timeout=300s
 
-SNAP1_SIZE=$(kubectl get volumesnapshot postgres-snapshot-1 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
+SNAP1_SIZE=$(kubectl get volumesnapshot block-snapshot-1 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
 echo "✓ Snapshot 1 created (size: $SNAP1_SIZE)"
 
 # Add more data (blocks 1001-1100)
@@ -91,7 +91,7 @@ kubectl apply -f - <<EOF
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-2
+  name: block-snapshot-2
   namespace: $NAMESPACE
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
@@ -101,9 +101,9 @@ EOF
 
 echo "  Waiting for snapshot to be ready..."
 kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
-  volumesnapshot/postgres-snapshot-2 -n "$NAMESPACE" --timeout=300s
+  volumesnapshot/block-snapshot-2 -n "$NAMESPACE" --timeout=300s
 
-SNAP2_SIZE=$(kubectl get volumesnapshot postgres-snapshot-2 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
+SNAP2_SIZE=$(kubectl get volumesnapshot block-snapshot-2 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
 echo "✓ Snapshot 2 created (size: $SNAP2_SIZE)"
 
 # Add even more data (blocks 1101-1300)
@@ -126,7 +126,7 @@ kubectl apply -f - <<EOF
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-3
+  name: block-snapshot-3
   namespace: $NAMESPACE
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
@@ -136,9 +136,9 @@ EOF
 
 echo "  Waiting for snapshot to be ready..."
 kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
-  volumesnapshot/postgres-snapshot-3 -n "$NAMESPACE" --timeout=300s
+  volumesnapshot/block-snapshot-3 -n "$NAMESPACE" --timeout=300s
 
-SNAP3_SIZE=$(kubectl get volumesnapshot postgres-snapshot-3 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
+SNAP3_SIZE=$(kubectl get volumesnapshot block-snapshot-3 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
 echo "✓ Snapshot 3 created (size: $SNAP3_SIZE)"
 
 # Show all snapshots
@@ -157,7 +157,7 @@ echo "Demo Workflow Complete!"
 echo "=========================================="
 echo ""
 echo "What was created:"
-echo "  - 3 VolumeSnapshots (postgres-snapshot-1, 2, 3)"
+echo "  - 3 VolumeSnapshots (block-snapshot-1, 2, 3)"
 echo "  - $AFTER_INSERT2 rows of data in PostgreSQL"
 echo "  - Snapshot 1: $SNAP1_SIZE (baseline)"
 echo "  - Snapshot 2: $SNAP2_SIZE (+100 blocks)"
@@ -166,7 +166,7 @@ echo ""
 echo "Next steps:"
 echo "  1. Check backup status:  ./scripts/backup-status.sh"
 echo "  2. Verify integrity:     ./scripts/integrity-check.sh"
-echo "  3. Test restore:         ./scripts/restore-dry-run.sh cbt-demo postgres-snapshot-1"
+echo "  3. Test restore:         ./scripts/restore-dry-run.sh cbt-demo block-snapshot-1"
 echo "  4. Simulate disaster:    ./scripts/05-simulate-disaster.sh"
 echo ""
 echo "NOTE: Full CBT block-level backup requires completing the gRPC client"

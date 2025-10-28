@@ -155,7 +155,7 @@ kubectl exec postgres-0 -- psql -c \
   "INSERT INTO demo_data ..."
 
 # Created snapshot
-kubectl create -f postgres-snapshot-1.yaml
+kubectl create -f block-snapshot-1.yaml
 
 # Checked raw snapshot blocks
 dd if=/csi-data-dir/snapshot.snap \
@@ -482,8 +482,8 @@ layout: default
 
 7. **Create First Snapshot**
    ```bash
-   kubectl apply -f postgres-snapshot-1.yaml
-   kubectl wait volumesnapshot postgres-snapshot-1 \
+   kubectl apply -f block-snapshot-1.yaml
+   kubectl wait volumesnapshot block-snapshot-1 \
      --for=jsonpath='{.status.readyToUse}'=true
    ```
    Snapshot created in **~4s**
@@ -498,7 +498,7 @@ layout: default
 9. **Call GetMetadataAllocated API**
    ```bash
    kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-     -s postgres-snapshot-1 -n cbt-demo
+     -s block-snapshot-1 -n cbt-demo
    ```
    Lists all **allocated blocks** in the snapshot
 
@@ -521,7 +521,7 @@ layout: default
 
 11. **Create Second Snapshot**
     ```bash
-    kubectl apply -f postgres-snapshot-2.yaml
+    kubectl apply -f block-snapshot-2.yaml
     ```
     Snapshot created in **~3.7s**
 
@@ -529,11 +529,11 @@ layout: default
     ```bash
     # Using snapshot names
     kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-      -p postgres-snapshot-1 -s postgres-snapshot-2 -n cbt-demo
+      -p block-snapshot-1 -s block-snapshot-2 -n cbt-demo
 
     # Using CSI handle (PR #180)
     kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-      -P <snap-handle> -s postgres-snapshot-2 -n cbt-demo
+      -P <snap-handle> -s block-snapshot-2 -n cbt-demo
     ```
     Reports only **changed blocks** between snapshots
 
@@ -553,7 +553,7 @@ layout: two-cols
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-1
+  name: block-snapshot-1
   namespace: cbt-demo
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
@@ -563,7 +563,7 @@ spec:
 
 Wait for ready state:
 ```bash
-kubectl wait volumesnapshot postgres-snapshot-1 \
+kubectl wait volumesnapshot block-snapshot-1 \
   -n cbt-demo \
   --for=jsonpath='{.status.readyToUse}'=true
 ```
@@ -589,7 +589,7 @@ Then create second snapshot:
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
 metadata:
-  name: postgres-snapshot-2
+  name: block-snapshot-2
   namespace: cbt-demo
 spec:
   volumeSnapshotClassName: csi-hostpath-snapclass
@@ -619,7 +619,7 @@ layout: default
 **API Call in Workflow:**
 ```bash
 kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -s postgres-snapshot-1 -n cbt-demo
+  -s block-snapshot-1 -n cbt-demo
 ```
 
 **Benefits**: Lists only allocated blocks, skips sparse regions
@@ -637,7 +637,7 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 **Workflow Demonstration** (Phase 4):
 
 1. Insert 100 additional rows (~10MB data)
-2. Create postgres-snapshot-2
+2. Create block-snapshot-2
 3. Query `GetMetadataDelta` comparing snapshots
 4. Returns only changed blocks
 
@@ -645,11 +645,11 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 ```bash
 # Using snapshot names
 kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -p postgres-snapshot-1 -s postgres-snapshot-2 -n cbt-demo
+  -p block-snapshot-1 -s block-snapshot-2 -n cbt-demo
 
 # Using CSI handle (PR #180 enhancement)
 kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -P <snap-handle> -s postgres-snapshot-2 -n cbt-demo
+  -P <snap-handle> -s block-snapshot-2 -n cbt-demo
 ```
 
 **Benefits**: Only transfer changed blocks (~10MB delta)
@@ -672,7 +672,7 @@ Note: CBT API is currently in alpha and subject to change
 
 ## GetMetadataAllocated - Live API Call
 
-**Workflow Step**: Phase 3 - After creating postgres-snapshot-1
+**Workflow Step**: Phase 3 - After creating block-snapshot-1
 
 **Deployment**:
 ```bash
@@ -684,7 +684,7 @@ kubectl apply -f manifests/snapshot-metadata-lister/
 ```bash
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
-  -s postgres-snapshot-1 \
+  -s block-snapshot-1 \
   -n cbt-demo
 ```
 
@@ -714,14 +714,14 @@ Note: CBT API is currently in alpha and subject to change
 
 ## GetMetadataDelta - Using Snapshot Names
 
-**Workflow Step**: Phase 4 - After creating postgres-snapshot-2
+**Workflow Step**: Phase 4 - After creating block-snapshot-2
 
 **API Call**:
 ```bash
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
-  -p postgres-snapshot-1 \
-  -s postgres-snapshot-2 \
+  -p block-snapshot-1 \
+  -s block-snapshot-2 \
   -n cbt-demo
 ```
 
@@ -756,7 +756,7 @@ Note: CBT API is currently in alpha and subject to change
 
 ```bash
 # Get CSI snapshot handle from VolumeSnapshotContent
-VSC=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo \
+VSC=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo \
   -o jsonpath="{.status.boundVolumeSnapshotContentName}")
 HANDLE=$(kubectl get volumesnapshotcontent $VSC \
   -o jsonpath="{.status.snapshotHandle}")
@@ -764,7 +764,7 @@ HANDLE=$(kubectl get volumesnapshotcontent $VSC \
 # Call API with CSI handle instead of snapshot name
 kubectl exec -n cbt-demo csi-client -- \
   /tools/snapshot-metadata-lister \
-  -P "$HANDLE" -s postgres-snapshot-2 -n cbt-demo
+  -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
 ```
 
 Reports **only changed blocks** (100 new rows, ~10MB)
@@ -823,7 +823,7 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister
 
 ```bash
 ./scripts/restore-dry-run.sh \
-  cbt-demo postgres-snapshot-1
+  cbt-demo block-snapshot-1
 ```
 
 </v-click>
@@ -895,7 +895,7 @@ layout: default
 
 1. **Snapshot not ready**
    ```bash
-   kubectl describe volumesnapshot postgres-snapshot-1 -n cbt-demo
+   kubectl describe volumesnapshot block-snapshot-1 -n cbt-demo
    kubectl logs -n kube-system -l app.kubernetes.io/name=snapshot-controller
    ```
 
@@ -1029,8 +1029,8 @@ layout: default
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
-| postgres-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
-| postgres-snapshot-2 | 200 rows (~20MB) | **~4s** | ✓ Ready |
+| block-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
+| block-snapshot-2 | 200 rows (~20MB) | **~4s** | ✓ Ready |
 
 </v-clicks>
 

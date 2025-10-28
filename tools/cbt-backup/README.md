@@ -43,13 +43,13 @@ docker build -t cbt-backup:latest .
 ```bash
 # Full backup
 ./cbt-backup create \
-  --pvc postgres-data-postgres-0 \
+  --pvc block-writer-data \
   --namespace cbt-demo
 
 # Incremental backup
 ./cbt-backup create \
-  --pvc postgres-data-postgres-0 \
-  --base-snapshot postgres-snapshot-1 \
+  --pvc block-writer-data \
+  --base-snapshot block-snapshot-1 \
   --namespace cbt-demo
 ```
 
@@ -100,9 +100,9 @@ s3://snapshots/
 
 ```json
 {
-  "name": "postgres-snapshot-1",
+  "name": "block-snapshot-1",
   "namespace": "cbt-demo",
-  "pvcName": "postgres-data-postgres-0",
+  "pvcName": "block-writer-data",
   "timestamp": "2025-01-15T10:30:00Z",
   "volumeSize": 2147483648,
   "isIncremental": false,
@@ -129,10 +129,10 @@ s3://snapshots/
 
 ```json
 {
-  "snapshotName": "postgres-snapshot-2",
-  "baseSnapshotName": "postgres-snapshot-1",
+  "snapshotName": "block-snapshot-2",
+  "baseSnapshotName": "block-snapshot-1",
   "isIncremental": true,
-  "dependencies": ["postgres-snapshot-1"]
+  "dependencies": ["block-snapshot-1"]
 }
 ```
 
@@ -154,7 +154,7 @@ spec:
         command:
         - /cbt-backup
         - create
-        - --pvc=postgres-data-postgres-0
+        - --pvc=block-writer-data
         - --namespace=cbt-demo
       restartPolicy: OnFailure
 ```

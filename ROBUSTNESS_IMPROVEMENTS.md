@@ -25,7 +25,7 @@ kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
 - **Problem**: Hardcoded PVC names in snapshot creation
 - **Solution**: Dynamic detection using jsonpath
 ```bash
-PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].metadata.name}')
+PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
 ```
 
 #### Snapshot Readiness Polling
@@ -35,7 +35,7 @@ PVC_NAME=$(kubectl get pvc -n cbt-demo -l app=postgres -o jsonpath='{.items[0].m
 RETRIES=0
 MAX_RETRIES=60
 while [ $RETRIES -lt $MAX_RETRIES ]; do
-  STATUS=$(kubectl get volumesnapshot postgres-snapshot-1 -n cbt-demo -o jsonpath='{.status.readyToUse}' 2>/dev/null || echo "")
+  STATUS=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo -o jsonpath='{.status.readyToUse}' 2>/dev/null || echo "")
   if [ "$STATUS" = "true" ]; then
     break
   fi
@@ -148,7 +148,7 @@ kubectl wait --for=condition=Ready pod -l app=minio -n cbt-demo --timeout=300s
 ```bash
 RETRIES=0
 MAX_RETRIES=30
-until kubectl get pod -n cbt-demo -l app=postgres 2>/dev/null | grep -q postgres; do
+until kubectl get pod -n cbt-demo -l app=block-writer 2>/dev/null | grep -q postgres; do
   if [ $RETRIES -ge $MAX_RETRIES ]; then
     echo "✗ PostgreSQL pod not created within timeout"
     kubectl get pods -n cbt-demo
@@ -163,10 +163,10 @@ done
 #### Enhanced Error Logging
 - **Solution**: Added pod describe on failure for better debugging
 ```bash
-kubectl wait --for=condition=Ready pod -l app=postgres -n cbt-demo --timeout=300s || {
+kubectl wait --for=condition=Ready pod -l app=block-writer -n cbt-demo --timeout=300s || {
   echo "✗ PostgreSQL pod not ready. Checking logs..."
-  kubectl logs -n cbt-demo -l app=postgres --tail=50
-  kubectl describe pod -n cbt-demo -l app=postgres
+  kubectl logs -n cbt-demo -l app=block-writer --tail=50
+  kubectl describe pod -n cbt-demo -l app=block-writer
   exit 1
 }
 ```

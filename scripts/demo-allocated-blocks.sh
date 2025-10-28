@@ -2,7 +2,7 @@
 set -euo pipefail
 
 NAMESPACE="${1:-cbt-demo}"
-SNAPSHOT_NAME="${2:-postgres-snapshot-1}"
+SNAPSHOT_NAME="${2:-block-snapshot-1}"
 PVC_NAME="${3:-}"
 
 echo "=========================================="

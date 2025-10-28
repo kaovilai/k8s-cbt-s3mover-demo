@@ -25,7 +25,7 @@ echo ""
 echo "[1/4] Saving current state for verification..."
 
 # Get current row count
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
 
 if [ -n "$POSTGRES_POD" ]; then
     PRE_DISASTER_ROWS=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c "SELECT COUNT(*) FROM demo_data;" 2>/dev/null | tr -d ' ' || echo "unknown")
