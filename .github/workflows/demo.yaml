@@ -266,7 +266,14 @@ jobs:
           echo "Using snapshot-metadata-lister to query allocated blocks..."
           echo ""
 
+          # Debug: Check if binary exists and works
+          echo "Debug: Testing snapshot-metadata-lister binary..."
+          kubectl exec -n cbt-demo csi-client -- ls -lh /tools/snapshot-metadata-lister
+          kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister -h 2>&1 || echo "Help command exited with: $?"
+          echo ""
+
           # Use the snapshot-metadata-lister to get allocated blocks
+          echo "Calling lister with full flags..."
           kubectl exec -n cbt-demo csi-client -- /tools/snapshot-metadata-lister \
             -snapshot "$SNAPSHOT_NAME" \
             -namespace cbt-demo \
