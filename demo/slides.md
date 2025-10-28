@@ -487,6 +487,8 @@ layout: default
 
 # Demo Workflow (cont.)
 
+<div class="text-sm">
+
 <v-clicks depth="2">
 
 ## Phase 3: CBT API Demonstration
@@ -517,9 +519,13 @@ layout: default
 
 </v-clicks>
 
+</div>
+
 ---
 
 # Demo Workflow (cont.)
+
+<div class="text-sm">
 
 <v-clicks depth="2">
 
@@ -549,6 +555,8 @@ layout: default
     Reports only **changed blocks** between snapshots
 
 </v-clicks>
+
+</div>
 
 ---
 layout: two-cols
@@ -671,7 +679,7 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 layout: default
 ---
 
-<div class="text-sm">
+<div class="text-xs">
 
 # CBT API Demo - GetMetadataAllocated
 
@@ -701,9 +709,7 @@ kubectl exec -n cbt-demo csi-client -- \
 
 **What it does**:
 - Queries SnapshotMetadataService via gRPC
-- Returns list of all allocated blocks
-- Skips sparse/empty regions
-- **Volume Size**: 2Gi → **Allocated blocks only**
+- Returns all allocated blocks (skips sparse/empty regions)
 
 </v-clicks>
 
@@ -790,6 +796,8 @@ layout: two-cols
 
 # Build Tools
 
+<div class="text-sm">
+
 <v-click>
 
 ## Backup Tool (cbt-backup)
@@ -811,20 +819,7 @@ go build -v -o cbt-backup ./cmd
 
 </v-click>
 
-<v-click>
-
-## Demo Tool (snapshot-metadata-lister)
-
-**Official kubernetes-csi tool** for CBT API demonstration:
-
-```bash
-# Deployed in csi-client pod
-kubectl exec csi-client -- /tools/snapshot-metadata-lister
-```
-
-**Used in workflow** to actually call GetMetadataAllocated and GetMetadataDelta APIs
-
-</v-click>
+</div>
 
 ::right::
 
