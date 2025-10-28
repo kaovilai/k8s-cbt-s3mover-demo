@@ -320,11 +320,15 @@ jobs:
           echo ""
 
           # Use the snapshot-metadata-lister to get allocated blocks
-          echo "Calling lister with short flags (matching upstream pattern)..."
-          echo "Command: /tools/snapshot-metadata-lister -s $SNAPSHOT_NAME -n cbt-demo"
+          echo "Calling GetMetadataAllocated API (matching upstream integration test)..."
+          echo "Command: /tools/snapshot-metadata-lister -snapshot $SNAPSHOT_NAME -namespace cbt-demo -starting-offset 0 -max-results 10 -kubeconfig \"\""
+          echo ""
           kubectl exec -n cbt-demo csi-client -c run-client -- /tools/snapshot-metadata-lister \
-            -s "$SNAPSHOT_NAME" \
-            -n cbt-demo 2>&1 | tee /tmp/lister-output.log || {
+            -snapshot "$SNAPSHOT_NAME" \
+            -namespace cbt-demo \
+            -starting-offset 0 \
+            -max-results 10 \
+            -kubeconfig "" 2>&1 | tee /tmp/lister-output.log || {
             EXIT_CODE=$?
             echo "Exit code: $EXIT_CODE"
             cat /tmp/lister-output.log
@@ -339,6 +343,13 @@ jobs:
             kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=50 || true
           }
 
+          echo ""
+          echo "Expected output format from GetMetadataAllocated:"
+          echo "Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes"
+          echo "------- -------------- ----------------- -------------- --------------"
+          echo "      1      1073741824      FIXED_LENGTH              0           4096"
+          echo "      2      1073741824      FIXED_LENGTH           4096           4096"
+          echo "      ..."
           echo ""
           echo "=========================================="
           echo "Expected Behavior with Full CBT Support"
