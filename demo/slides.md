@@ -725,7 +725,9 @@ layout: default
 
 # CI/CD Pipeline
 
-**Total CI Time**: ~5 minutes (jobs run in parallel)
+**Latest Successful Run**: [#87 (18862281941)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/18862281941)
+**Total Time**: 6 minutes (jobs run in parallel)
+**Commit**: fix: add explicit container selection and RBAC permissions for lister
 
 <div grid="~ cols-4 gap-4">
 <div>
@@ -734,13 +736,12 @@ layout: default
 
 ## demo
 
-**End-to-end test** (**5m 9s**)
+**End-to-end test** (**5m 24s**)
 - Setup cluster
 - Deploy components
 - Create snapshots
 - Test CBT APIs
 - **Result**: ✓ Success
-- **Note**: API calls succeed but CSI driver returns no metadata
 
 </v-click>
 
@@ -751,7 +752,7 @@ layout: default
 
 ## build-backup-tool
 
-**Build & test** (**1m 16s**)
+**Build & test** (**30s**)
 - Go 1.22
 - Download deps
 - Build binary
@@ -767,7 +768,7 @@ layout: default
 
 ## lint
 
-**Code quality** (**1m 15s**)
+**Code quality** (**18s**)
 - shellcheck scripts
 - go fmt
 - go vet
@@ -782,7 +783,7 @@ layout: default
 
 ## build-restore-tool
 
-**Placeholder** (**15s**)
+**Placeholder** (**11s**)
 - Check status
 - Build placeholder
 - Future enhancement
@@ -816,25 +817,26 @@ layout: default
 
 <div class="text-sm">
 
-**Latest Successful Run**: #18855407039 - Completed in **6m 12s**
+**Latest Successful Run**: [#87 (18862281941)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/18862281941)
+**Date**: Oct 28, 2025 | **Total Time**: 6m 0s
 
 <v-clicks>
 
 ## Infrastructure Deployed
 
 - **Cluster**: Minikube (4 CPUs, 8GB RAM, containerd)
-- **Snapshot Controller**: Ready in ~37s
-- **CSI Driver**: Deployed with CBT + metadata sidecar
+- **Snapshot Controller**: Deployed with v8.2.0 CRDs
+- **CSI Driver**: hostpath with **canary** tag + snapshot-metadata sidecar
 - **MinIO S3**: S3-compatible backup storage
 - **PostgreSQL**: StatefulSet with **2Gi block PVC**
-- **csi-client pod**: snapshot-metadata-lister deployed (**62s** to ready)
+- **csi-client pod**: snapshot-metadata-lister with RBAC
 
 ## Snapshot Performance
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
 | postgres-snapshot-1 | 100 rows (~10MB) | **~4s** | ✓ Ready |
-| postgres-snapshot-2 | 200 rows (~20MB) | **~3.7s** | ✓ Ready |
+| postgres-snapshot-2 | 200 rows (~20MB) | **~4s** | ✓ Ready |
 
 </v-clicks>
 
@@ -850,7 +852,7 @@ layout: default
 
 <v-clicks>
 
-## CBT API Call Status
+## CBT API Call Status (Run #87)
 
 ✓ **API Calls Complete Successfully**
 - GetMetadataAllocated: Executes without errors
@@ -858,12 +860,13 @@ layout: default
 - **Current Limitation**: CSI hostpath driver does not implement SnapshotMetadataService gRPC endpoint, so no metadata is returned
 - **Expected**: With a production CSI driver that implements CBT, these calls would return block metadata
 
-## Recent Improvements
+## PR #180 Support Confirmed ✅
 
-✅ **Canary Build Deployment**: Now using latest upstream builds
+**Now using canary build with PR #180 merged** (Oct 15, 2025):
 - Image: `gcr.io/k8s-staging-sig-storage/csi-snapshot-metadata:canary`
-- Includes merged PR #180 (CSI handle support)
-- Follows official external-snapshot-metadata integration test pattern
+- Image: `gcr.io/k8s-staging-sig-storage/hostpathplugin:canary`
+- **Key Feature**: GetMetadataDelta accepts CSI snapshot handles instead of names
+- **Benefit**: Base snapshot can be deleted after obtaining handle
 - TLS-secured gRPC endpoint on port 6443
 
 </v-clicks>
