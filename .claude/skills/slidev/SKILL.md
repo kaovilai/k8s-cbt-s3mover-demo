@@ -76,8 +76,28 @@ slidev export --range 1,4-8    # Export specific slides
 
 ### Export Verification
 
-#### Content Fit Verification Workflow
-Use PNG export with direct analysis to verify all content displays correctly:
+#### Automated Content Fit Verification (Recommended)
+
+For comprehensive content verification, use the specialized agent:
+
+```bash
+# Claude Code will invoke the slidev-content-verifier agent
+# This agent will automatically:
+# 1. Export slides to PNG with proper wait times
+# 2. Analyze each slide systematically
+# 3. Check for all types of content issues
+# 4. Provide specific fix recommendations
+```
+
+To use the agent, simply ask Claude Code:
+- "Verify that all slide content fits properly"
+- "Check my slides for content cutoffs"
+- "Run content fit verification on the presentation"
+
+The agent uses the workflow described below and provides a detailed report with specific fixes.
+
+#### Manual Content Fit Verification Workflow
+For manual verification or understanding the process, use PNG export with direct analysis:
 
 ```bash
 # 1. Export slides to PNG with proper wait times
