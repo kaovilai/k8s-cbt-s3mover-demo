@@ -256,11 +256,24 @@ All workload PVCs in this demo use block mode.
 ### Environment Constraints
 
 - **Minikube with VM drivers (Docker Desktop, QEMU)**: Full support (VM-based, used by upstream CI)
-- **Minikube with Podman**: LIMITED support (experimental driver, loop device issues with block volumes)
+- **Minikube with Podman**: LIMITED support - works for Filesystem volumes only, NOT for Block volumes
 - **Kind**: NOT supported (container-based limitations with loop devices)
 - **EKS/GKE/AKS**: Full support (production environments)
 
-The CSI hostpath driver requires actual block device support for volumeMode: Block. Container-based environments (Kind, Podman) cannot provide reliable loop device support needed for block-mode PVCs. Use VM-based drivers (Docker Desktop with HyperKit/Virtualization.framework, QEMU) or cloud clusters for full functionality.
+**Block Device Limitation**: The CSI hostpath driver requires loop device support for `volumeMode: Block`. Podman on macOS (via AppleHV) cannot create loop devices (`/dev/loop*`), resulting in `losetup: failed to set up loop device` errors. This affects the CBT demo which requires block-mode PVCs.
+
+**Podman Setup**: For running Minikube with Podman for non-CBT workloads (Filesystem volumes), see [CNCF guide](https://www.cncf.io/blog/2025/05/13/how-to-install-and-run-minikube-with-rootless-podman-on-arm-based-macbooks/):
+```bash
+# Initialize Podman machine (if not already done)
+podman machine init --cpus 4 --memory 4096 --disk-size 25
+podman machine start
+
+# Configure and start Minikube with rootless mode
+minikube config set rootless true
+minikube start --driver=podman --container-runtime=containerd
+```
+
+**For CBT Demo**: Use VM-based drivers (Docker Desktop with HyperKit/Virtualization.framework, QEMU) or cloud clusters for full block device support.
 
 **macOS Note**: Requires GNU sed for deployment scripts. Install with `brew install gnu-sed` and add to PATH:
 ```bash
