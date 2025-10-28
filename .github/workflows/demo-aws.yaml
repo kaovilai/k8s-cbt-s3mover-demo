@@ -335,18 +335,14 @@ jobs:
             echo "  1. The CSI driver doesn't implement the CBT metadata APIs"
             echo "  2. The SnapshotMetadataService is not available"
             echo "  3. The snapshot is not in a ready state"
-            echo ""
-            echo "Checking CSI driver logs..."
-            kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=50 || true
           }
 
+          # Show CSI driver logs for debugging (always, not just on failure)
           echo ""
-          echo "Expected output format from GetMetadataAllocated:"
-          echo "Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes"
-          echo "------- -------------- ----------------- -------------- --------------"
-          echo "      1      1073741824      FIXED_LENGTH              0           4096"
-          echo "      2      1073741824      FIXED_LENGTH           4096           4096"
-          echo "      ..."
+          echo "=========================================="
+          echo "CSI Driver Logs (for debugging)"
+          echo "=========================================="
+          kubectl logs -n default csi-hostpathplugin-0 --all-containers --tail=100 || true
           echo ""
           echo "=========================================="
           echo "Expected Behavior with Full CBT Support"
