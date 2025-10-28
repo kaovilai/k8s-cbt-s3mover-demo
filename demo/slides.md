@@ -143,28 +143,34 @@ Application → Filesystem → Page Cache → [CBT BLIND SPOT] → Block Device
 layout: two-cols
 ---
 
-# Real Experiment: PostgreSQL vs Raw Blocks
+# Real Experiments: PostgreSQL vs Raw Blocks
 
 <v-click>
 
-## ❌ PostgreSQL + ext4 (FAILED)
+## ❌ Experiment 1: PostgreSQL (FAILED)
+
+**Initial Attempt** - Used volumeMode: Block PVC
 
 ```bash
+# PostgreSQL formatted /dev/xvda with ext4
 # Wrote data through filesystem
 kubectl exec postgres-0 -- psql -c \
   "INSERT INTO demo_data ..."
 
 # Created snapshot
-kubectl create -f block-snapshot-1.yaml
+kubectl create -f postgres-snapshot-1.yaml
 
-# Checked raw snapshot blocks
-dd if=/csi-data-dir/snapshot.snap \
-  bs=4096 count=100 | od -An -tx1
+# Ran metadata lister
+kubectl exec csi-client -- \
+  /tools/snapshot-metadata-lister \
+  -s postgres-snapshot-1 -n cbt-demo
 ```
 
-**Result**: `00 00 00 00 ...` (all zeros!)
+**Result**: `[]` (empty array - NO metadata!)
 
-**GetMetadataAllocated**: `[]` (empty array)
+**Why**: PostgreSQL creates ext4, data hidden in filesystem
+
+**Evidence**: [Commit 94c5aaaa](https://github.com/kaovilai/k8s-cbt-s3mover-demo/commit/94c5aaaaff6f43af114427d3ba637ce4ed794fe4)
 
 </v-click>
 
@@ -172,10 +178,12 @@ dd if=/csi-data-dir/snapshot.snap \
 
 <v-click>
 
-## ✅ Raw Block Writes (SUCCESS)
+## ✅ Experiment 2: Raw Blocks (SUCCESS)
+
+**EC2 Test** - Direct block device writes
 
 ```bash
-# Wrote directly to block device
+# NO filesystem - raw device only
 kubectl exec block-writer -- \
   dd if=/dev/urandom of=/dev/xvdb \
   bs=4096 count=100
@@ -183,14 +191,17 @@ kubectl exec block-writer -- \
 # Created snapshot
 kubectl create -f cbt-test-snap-1.yaml
 
-# Checked raw snapshot blocks
-dd if=/csi-data-dir/snapshot.snap \
-  bs=4096 count=1 | od -An -tx1
+# Ran metadata lister
+kubectl exec csi-client -- \
+  /tools/snapshot-metadata-lister \
+  -s cbt-test-snap-1 -n cbt-demo -o json
 ```
 
-**Result**: `f2 5b 6c 18 3d e0 36 73 ...` (random data!)
+**Result**: **100 blocks** ✅
 
-**GetMetadataAllocated**: **100 blocks** ✅
+**Delta Test**: **80 changed blocks** ✅
+
+**Proof**: Real CBT metadata at block level
 
 </v-click>
 
