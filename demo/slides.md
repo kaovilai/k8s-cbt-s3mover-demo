@@ -179,34 +179,37 @@ CRITICAL CONCEPT - Spend extra time here:
 layout: two-cols
 ---
 
-# Real Experiments: PostgreSQL vs Raw Blocks
+# CBT with Different Application Types
 
 <v-click>
 
-## ❌ Experiment 1: PostgreSQL (FAILED)
+## 🔧 Applications That Need Quiescing
 
-**Initial Attempt** - Used volumeMode: Block PVC
+**Databases with Filesystem Layers** (PostgreSQL, MySQL, etc.)
 
 ```bash
-# PostgreSQL formatted /dev/xvda with ext4
-# Wrote data through filesystem
+# Standard database workflow
 kubectl exec postgres-0 -- psql -c \
   "INSERT INTO demo_data ..."
 
-# Created snapshot
-kubectl create -f postgres-snapshot-1.yaml
-
-# Ran metadata lister
-kubectl exec csi-client -- \
-  /tools/snapshot-metadata-lister \
-  -s postgres-snapshot-1 -n cbt-demo
+# Without quiescing: Data in page cache
+# Not yet visible to CBT layer
 ```
 
-**Result**: `[]` (empty array - NO metadata!)
+**Why Quiescing Needed**: Data buffered in page cache (5-30s delay)
 
-**Why**: PostgreSQL creates ext4, data hidden in filesystem
+**Solution**: Velero pre-hooks flush cache before snapshot
 
-**Evidence**: [Commit 94c5aaaa](https://github.com/kaovilai/k8s-cbt-s3mover-demo/commit/94c5aaaaff6f43af114427d3ba637ce4ed794fe4)
+<div class="text-xs mt-2 p-2 bg-green-900 bg-opacity-20 rounded">
+
+**Example Velero Pre-Hook**:
+```yaml
+pre.hook.backup.velero.io/command:
+  '["/bin/bash", "-c",
+   "psql -c \"CHECKPOINT; SELECT pg_switch_wal();\""]'
+```
+
+</div>
 
 </v-click>
 
@@ -214,9 +217,9 @@ kubectl exec csi-client -- \
 
 <v-click>
 
-## ✅ Experiment 2: Raw Blocks (SUCCESS)
+## ⚡ Direct Block I/O Applications
 
-**EC2 Test** - Direct block device writes
+**Immediate CBT Visibility** - No quiescing needed
 
 ```bash
 # NO filesystem - raw device only
@@ -242,12 +245,14 @@ kubectl exec csi-client -- \
 </v-click>
 
 <!--
-Real-world learning from the demo:
-- LEFT SIDE: PostgreSQL experiment shows the limitation - empty metadata array
-- Point to the commit link as proof of the failed attempt
-- RIGHT SIDE: Raw block device writes successfully tracked 100 blocks initially, 80 changed blocks in delta
-- This validates that CBT works at the block layer, not filesystem layer
-- Key takeaway: For production CBT, workloads must bypass filesystem caching
+Real-world CBT considerations:
+- LEFT SIDE: Some applications need quiescing before snapshots (databases with filesystem layers)
+- Emphasize: This is normal - backup tools like Velero provide hooks for this
+- Show the Velero YAML example: CHECKPOINT + pg_switch_wal() flushes pages to disk
+- RIGHT SIDE: Applications using direct block I/O don't need quiescing
+- Raw block device writes tracked immediately: 100 blocks initially, 80 changed blocks in delta
+- This validates that CBT works at the block layer
+- Key takeaway: Choose the right approach - direct I/O OR quiescing hooks with backup tools
 -->
 
 ---
@@ -326,10 +331,23 @@ layout: default
 - Applications designed for block storage
 - ✅ Full CBT visibility
 
-**Option 2: Filesystem with Sync**
-- Custom backup agents trigger `sync` before snapshots
-- Force flush of dirty pages to disk
-- ⚠️ Adds latency, not guaranteed atomic
+**Option 2: Filesystem with Sync (Velero Hooks)**
+- Backup tools like Velero support pre-snapshot hooks
+- Force flush of dirty pages before snapshot
+- ⚠️ Adds latency, requires application coordination
+
+<div class="text-xs mt-2 p-2 bg-gray-800 rounded">
+
+**Example: Velero PostgreSQL Pre-Hook**
+```yaml
+metadata:
+  annotations:
+    pre.hook.backup.velero.io/command: '["/bin/bash", "-c",
+      "psql -c \"CHECKPOINT; SELECT pg_switch_wal();\""]'
+    pre.hook.backup.velero.io/timeout: 30s
+```
+
+</div>
 
 **Option 3: Accept Limitations**
 - Use CBT for block-level tracking only
@@ -345,7 +363,11 @@ layout: default
 <!--
 Production considerations:
 - Option 1 (Raw Block): Best for CBT - databases like Cassandra, MongoDB, ScyllaDB already use DirectIO
-- Option 2 (Filesystem + Sync): Possible but adds latency - need custom backup agent
+- Option 2 (Velero Hooks): Most practical for existing PostgreSQL/MySQL deployments
+  - Show the YAML example: Velero pre.hook.backup annotations
+  - CHECKPOINT forces dirty pages to disk, pg_switch_wal() ensures WAL flush
+  - Works with filesystem volumes + CBT for accurate change tracking
+  - Similar hooks exist for MySQL (FLUSH TABLES WITH READ LOCK), MongoDB (fsync)
 - Option 3 (Accept Limitations): Understand snapshot timing is critical
 - Emphasize: This is an alpha feature, CSI driver support varies
 - Most cloud CSI drivers (EBS, Azure Disk) don't support CBT yet - hostpath is currently the only example
