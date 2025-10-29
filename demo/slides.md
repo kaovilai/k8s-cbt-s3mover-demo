@@ -27,7 +27,7 @@ Efficient Backup with Changed Block Tracking
 <!--
 Welcome! This presentation demonstrates Changed Block Tracking (CBT) in Kubernetes.
 - Introduce yourself and your role
-- Mention this is an alpha feature in K8s 1.33+
+- Mention timeline: K8s 1.33 alpha, OCP 4.20 tech preview, K8s 1.36 proposed beta
 - Set expectations: ~25 minute talk with technical deep-dive
 - Audience: DevOps engineers, backup admins, K8s storage users
 -->
@@ -46,9 +46,17 @@ layout: full
 
 Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
 
-<div class="text-sm">
+</v-click>
+<v-click>
 
-**Alpha support** announced in Kubernetes for CSI storage drivers
+<div class="text-sm mt-4 p-3 bg-blue-900 bg-opacity-30 rounded">
+
+### 📅 Adoption Timeline
+
+- **K8s 1.33** - Alpha (no feature gate required)
+- **OCP 4.20** - Tech Preview (feature gate enabled)
+- **K8s 1.36** - Proposed Beta target
+- **OCP 5.0** - Expected to include K8s 1.36 beta
 
 </div>
 
@@ -105,11 +113,12 @@ graph TB
 
 <!--
 Key points to emphasize:
-- KEP-3314 introduces CBT as alpha in K8s 1.33+
+- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 tech preview
+- Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
 - Benefits: Highlight the time savings (hours to minutes) for large datasets
 - Note the block volume requirement - this is critical!
 - Show the diagram animation to illustrate the delta concept
-- Mention this is production-ready alpha (no feature gate required)
+- Emphasize adoption path from alpha to beta across both K8s and OpenShift
 -->
 
 ---
