@@ -27,7 +27,7 @@ Efficient Backup with Changed Block Tracking
 <!--
 Welcome! This presentation demonstrates Changed Block Tracking (CBT) in Kubernetes.
 - Introduce yourself and your role
-- Mention this is an alpha feature in K8s 1.33+
+- Mention timeline: K8s 1.33 alpha, OCP 4.20 tech preview, K8s 1.36 proposed beta
 - Set expectations: ~25 minute talk with technical deep-dive
 - Audience: DevOps engineers, backup admins, K8s storage users
 -->
@@ -46,9 +46,17 @@ layout: full
 
 Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
 
-<div class="text-sm">
+</v-click>
+<v-click>
 
-**Alpha support** announced in Kubernetes for CSI storage drivers
+<div class="text-sm mt-4 p-3 bg-blue-900 bg-opacity-30 rounded">
+
+### 📅 Adoption Timeline
+
+- **K8s 1.33** - Alpha (no feature gate required)
+- **OCP 4.20** - Tech Preview (feature gate enabled)
+- **K8s 1.36** - Proposed Beta target
+- **OCP 5.0** - Expected to include K8s 1.36 beta
 
 </div>
 
@@ -105,11 +113,12 @@ graph TB
 
 <!--
 Key points to emphasize:
-- KEP-3314 introduces CBT as alpha in K8s 1.33+
+- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 tech preview
+- Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
 - Benefits: Highlight the time savings (hours to minutes) for large datasets
 - Note the block volume requirement - this is critical!
 - Show the diagram animation to illustrate the delta concept
-- Mention this is production-ready alpha (no feature gate required)
+- Emphasize adoption path from alpha to beta across both K8s and OpenShift
 -->
 
 ---
@@ -170,34 +179,26 @@ CRITICAL CONCEPT - Spend extra time here:
 layout: two-cols
 ---
 
-# Real Experiments: PostgreSQL vs Raw Blocks
+# CBT with Different Application Types
 
 <v-click>
 
-## ❌ Experiment 1: PostgreSQL (FAILED)
+## 🔧 Applications That Need Quiescing
 
-**Initial Attempt** - Used volumeMode: Block PVC
+**Databases with Filesystem Layers** (PostgreSQL, MySQL, etc.)
 
 ```bash
-# PostgreSQL formatted /dev/xvda with ext4
-# Wrote data through filesystem
+# Standard database workflow
 kubectl exec postgres-0 -- psql -c \
   "INSERT INTO demo_data ..."
 
-# Created snapshot
-kubectl create -f postgres-snapshot-1.yaml
-
-# Ran metadata lister
-kubectl exec csi-client -- \
-  /tools/snapshot-metadata-lister \
-  -s postgres-snapshot-1 -n cbt-demo
+# Without quiescing: Data in page cache
+# Not yet visible to CBT layer
 ```
 
-**Result**: `[]` (empty array - NO metadata!)
+**Why Quiescing Needed**: Page cache buffering (5-30s)
 
-**Why**: PostgreSQL creates ext4, data hidden in filesystem
-
-**Evidence**: [Commit 94c5aaaa](https://github.com/kaovilai/k8s-cbt-s3mover-demo/commit/94c5aaaaff6f43af114427d3ba637ce4ed794fe4)
+**Solution**: Velero pre-hooks (CHECKPOINT + pg_switch_wal())
 
 </v-click>
 
@@ -205,9 +206,9 @@ kubectl exec csi-client -- \
 
 <v-click>
 
-## ✅ Experiment 2: Raw Blocks (SUCCESS)
+## ⚡ Direct Block I/O Applications
 
-**EC2 Test** - Direct block device writes
+**Immediate CBT Visibility** - No quiescing needed
 
 ```bash
 # NO filesystem - raw device only
@@ -233,12 +234,14 @@ kubectl exec csi-client -- \
 </v-click>
 
 <!--
-Real-world learning from the demo:
-- LEFT SIDE: PostgreSQL experiment shows the limitation - empty metadata array
-- Point to the commit link as proof of the failed attempt
-- RIGHT SIDE: Raw block device writes successfully tracked 100 blocks initially, 80 changed blocks in delta
-- This validates that CBT works at the block layer, not filesystem layer
-- Key takeaway: For production CBT, workloads must bypass filesystem caching
+Real-world CBT considerations:
+- LEFT SIDE: Some applications need quiescing before snapshots (databases with filesystem layers)
+- Emphasize: This is normal - backup tools like Velero provide hooks for this
+- Show the Velero YAML example: CHECKPOINT + pg_switch_wal() flushes pages to disk
+- RIGHT SIDE: Applications using direct block I/O don't need quiescing
+- Raw block device writes tracked immediately: 100 blocks initially, 80 changed blocks in delta
+- This validates that CBT works at the block layer
+- Key takeaway: Choose the right approach - direct I/O OR quiescing hooks with backup tools
 -->
 
 ---
@@ -259,7 +262,6 @@ layout: default
 
 </v-clicks>
 </td>
-k
 <td>
 ```mermaid {theme: 'neutral', scale: 0.4}
 graph TB
@@ -317,10 +319,10 @@ layout: default
 - Applications designed for block storage
 - ✅ Full CBT visibility
 
-**Option 2: Filesystem with Sync**
-- Custom backup agents trigger `sync` before snapshots
-- Force flush of dirty pages to disk
-- ⚠️ Adds latency, not guaranteed atomic
+**Option 2: Filesystem with Sync (Velero Hooks)**
+- Velero pre-hooks flush pages: `CHECKPOINT; pg_switch_wal()`
+- Similar for MySQL (`FLUSH TABLES`), MongoDB (`fsync`)
+- ⚠️ Adds latency, requires app coordination
 
 **Option 3: Accept Limitations**
 - Use CBT for block-level tracking only
@@ -336,7 +338,11 @@ layout: default
 <!--
 Production considerations:
 - Option 1 (Raw Block): Best for CBT - databases like Cassandra, MongoDB, ScyllaDB already use DirectIO
-- Option 2 (Filesystem + Sync): Possible but adds latency - need custom backup agent
+- Option 2 (Velero Hooks): Most practical for existing PostgreSQL/MySQL deployments
+  - Show the YAML example: Velero pre.hook.backup annotations
+  - CHECKPOINT forces dirty pages to disk, pg_switch_wal() ensures WAL flush
+  - Works with filesystem volumes + CBT for accurate change tracking
+  - Similar hooks exist for MySQL (FLUSH TABLES WITH READ LOCK), MongoDB (fsync)
 - Option 3 (Accept Limitations): Understand snapshot timing is critical
 - Emphasize: This is an alpha feature, CSI driver support varies
 - Most cloud CSI drivers (EBS, Azure Disk) don't support CBT yet - hostpath is currently the only example
