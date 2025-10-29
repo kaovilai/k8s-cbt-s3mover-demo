@@ -196,20 +196,9 @@ kubectl exec postgres-0 -- psql -c \
 # Not yet visible to CBT layer
 ```
 
-**Why Quiescing Needed**: Data buffered in page cache (5-30s delay)
+**Why Quiescing Needed**: Page cache buffering (5-30s)
 
-**Solution**: Velero pre-hooks flush cache before snapshot
-
-<div class="text-xs mt-2 p-2 bg-green-900 bg-opacity-20 rounded">
-
-**Example Velero Pre-Hook**:
-```yaml
-pre.hook.backup.velero.io/command:
-  '["/bin/bash", "-c",
-   "psql -c \"CHECKPOINT; SELECT pg_switch_wal();\""]'
-```
-
-</div>
+**Solution**: Velero pre-hooks (CHECKPOINT + pg_switch_wal())
 
 </v-click>
 
@@ -273,7 +262,6 @@ layout: default
 
 </v-clicks>
 </td>
-k
 <td>
 ```mermaid {theme: 'neutral', scale: 0.4}
 graph TB
@@ -332,22 +320,9 @@ layout: default
 - ✅ Full CBT visibility
 
 **Option 2: Filesystem with Sync (Velero Hooks)**
-- Backup tools like Velero support pre-snapshot hooks
-- Force flush of dirty pages before snapshot
-- ⚠️ Adds latency, requires application coordination
-
-<div class="text-xs mt-2 p-2 bg-gray-800 rounded">
-
-**Example: Velero PostgreSQL Pre-Hook**
-```yaml
-metadata:
-  annotations:
-    pre.hook.backup.velero.io/command: '["/bin/bash", "-c",
-      "psql -c \"CHECKPOINT; SELECT pg_switch_wal();\""]'
-    pre.hook.backup.velero.io/timeout: 30s
-```
-
-</div>
+- Velero pre-hooks flush pages: `CHECKPOINT; pg_switch_wal()`
+- Similar for MySQL (`FLUSH TABLES`), MongoDB (`fsync`)
+- ⚠️ Adds latency, requires app coordination
 
 **Option 3: Accept Limitations**
 - Use CBT for block-level tracking only
