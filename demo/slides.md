@@ -61,10 +61,10 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 </div>
 
 </v-click>
+<v-click>
 <table>
 <tr>
 <td>
-<v-click>
 
 ## Key Benefits
 
@@ -72,8 +72,6 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 - 📉 **Reduced Resource Usage** - Less network bandwidth and I/O
 - 💰 **Lower Storage Costs** - Avoid redundant full backups
 - 🔄 **Incremental Backups** - Only transfer changed blocks
-</v-click>
-<v-click>
 
 <div class="text-sm mt-4 p-2 bg-yellow-900 bg-opacity-20 rounded">
 
@@ -81,11 +79,9 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 
 </div>
 
-</v-click>
 </td>
 <td>
 
-<v-click>
 
 ```mermaid {scale:0.5}
 graph TB
@@ -105,11 +101,11 @@ graph TB
     style S3 fill:#9f6,stroke:#333
 ```
 
-</v-click>
 
 </td>
 </tr>
 </table>
+</v-click>
 
 <!--
 Key points to emphasize:
@@ -122,11 +118,8 @@ Key points to emphasize:
 -->
 
 ---
-layout: default
+layout: two-cols
 ---
-
-# Why Block Mode Volumes Are Required
-
 
 # CBT with Different Application Types
 
@@ -134,26 +127,20 @@ layout: default
 
 ## 🔧 Applications That Need Quiescing
 
-**Databases with Filesystem Layers** (PostgreSQL, MySQL, etc.)
+**Databases** (PostgreSQL, MySQL)
 
 ```bash
-# Standard database workflow
+# Write to database
 kubectl exec postgres-0 -- psql -c \
   "INSERT INTO demo_data ..."
-
-# Without quiescing: Data in page cache
-# Not yet visible to CBT layer
+# Data in page cache, not visible to CBT
 ```
 
-**Why Quiescing Needed**: Page cache buffering (5-30s)
+**Issue**: Page cache delay (5-30s)
 
-**Solution**: Velero pre-hooks (CHECKPOINT + pg_switch_wal())
+**Fix**: Velero pre-hooks for flush
 
 </v-click>
-
----
-layout: default
----
 
 ::right::
 
@@ -161,28 +148,21 @@ layout: default
 
 ## ⚡ Direct Block I/O Applications
 
-**Immediate CBT Visibility** - No quiescing needed
+### Immediate CBT Visibility
 
 ```bash
-# NO filesystem - raw device only
-kubectl exec block-writer -- \
-  dd if=/dev/urandom of=/dev/xvdb \
+# Write to raw device
+dd if=/dev/urandom of=/dev/xvdb \
   bs=4096 count=100
 
-# Created snapshot
-kubectl create -f cbt-test-snap-1.yaml
-
-# Ran metadata lister
-kubectl exec csi-client -- \
-  /tools/snapshot-metadata-lister \
-  -s cbt-test-snap-1 -n cbt-demo -o json
+# Snapshot → metadata → blocks
+kubectl create -f snapshot.yaml
 ```
 
-**Result**: **100 blocks** ✅
+**Results**:
 
-**Delta Test**: **80 changed blocks** ✅
-
-**Proof**: Real CBT metadata at block level
+- Initial: **100 blocks** ✅
+- Delta: **80 changed** ✅
 
 </v-click>
 
