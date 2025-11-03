@@ -127,57 +127,6 @@ layout: default
 
 # Why Block Mode Volumes Are Required
 
-<div class="text-sm">
-
-<v-click>
-
-## Critical Understanding
-
-CBT operates at the **raw block device layer**, not the filesystem layer. This creates a fundamental visibility barrier.
-
-</v-click>
-
-<v-clicks depth="2">
-
-## Filesystem Write Path (INVISIBLE to CBT)
-
-```
-Application → Filesystem → Page Cache → [CBT BLIND SPOT] → Block Device
-  (PostgreSQL)    (ext4)    (5-30s delay)                      (CBT sees here)
-```
-
-### The Page Cache Barrier
-
-1. **Initial Write** (0ms)
-   - PostgreSQL: `write()` syscall → Success
-   - Data lands in **kernel page cache** (dirty pages)
-   - **CBT sees**: Nothing (no block I/O yet)
-
-2. **Dirty Page Window** (5-30 seconds)
-   - Data exists only in RAM
-   - Kernel flushes in background (`bdflush`)
-   - **CBT sees**: Still nothing
-
-3. **Block Device I/O** (after flush)
-   - Finally visible to CBT
-   - But scattered across filesystem structures (metadata, journal, data blocks)
-
-</v-clicks>
-
-</div>
-
-<!--
-CRITICAL CONCEPT - Spend extra time here:
-- Page cache is the key barrier between application writes and CBT visibility
-- Emphasize the 5-30 second delay window
-- Explain that filesystem adds metadata, journal, and fragmentation
-- This is why direct block I/O (raw devices) is necessary for CBT
-- Mention that some databases (Cassandra, MongoDB) use DirectIO and work better with CBT
--->
-
----
-layout: two-cols
----
 
 # CBT with Different Application Types
 
@@ -201,6 +150,10 @@ kubectl exec postgres-0 -- psql -c \
 **Solution**: Velero pre-hooks (CHECKPOINT + pg_switch_wal())
 
 </v-click>
+
+---
+layout: default
+---
 
 ::right::
 
