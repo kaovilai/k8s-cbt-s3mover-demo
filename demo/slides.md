@@ -254,8 +254,8 @@ layout: default
 <v-clicks>
 
 1. **CSI Driver** with CBT
+   - hostpath (demo), Ceph RBD (production)
    - SnapshotMetadata service
-   - Block change tracking
 
 2. **MinIO** S3 storage
    - S3-compatible object storage
