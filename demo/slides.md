@@ -95,7 +95,7 @@ graph TB
     PVC -->|Write +100 blocks| S2
     S1 -->|Compare| CBT
     S2 -->|Compare| CBT
-    CBT -->|~10MB delta| S3
+    CBT -->|~400KB delta| S3
 
     style CBT fill:#f96,stroke:#333
     style S3 fill:#9f6,stroke:#333
@@ -386,7 +386,7 @@ Setup phase - emphasize automation:
 Workload deployment:
 - MinIO provides S3-compatible storage (easier than real S3 for demos)
 - Block-writer uses volumeMode: Block - emphasize this requirement
-- Initial data: 100 blocks written to raw device /dev/xvdb (~10MB)
+- Initial data: 100 blocks written to raw device /dev/xvdb (~400KB)
 - Verification scripts ensure everything is working
 - This is the baseline for our CBT comparisons
 -->
@@ -399,7 +399,7 @@ Workload deployment:
 
 <v-clicks depth="2">
 
-## Phase 3: CBT API Demonstration
+## Phase 3: GetMetadataAllocated Demonstration
 
 7. **Create First Snapshot**
    ```bash
@@ -440,6 +440,44 @@ Phase 3 - Full backup demonstration:
 -->
 
 ---
+layout: default
+---
+
+# Phase 3: Expected Output
+
+<div class="text-sm">
+
+## GetMetadataAllocated API Response
+
+**Expected output** (with production CSI driver supporting CBT):
+
+```text
+Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes
+------- -------------- ----------------- -------------- --------------
+      1     2147483648      FIXED_LENGTH              0           4096
+      1     2147483648      FIXED_LENGTH           4096           4096
+      1     2147483648      FIXED_LENGTH           8192           4096
+      1     2147483648      FIXED_LENGTH          12288           4096
+      1     2147483648      FIXED_LENGTH          16384           4096
+      ... (95 more blocks)
+
+Total: 100 blocks allocated (409,600 bytes = ~400KB)
+Volume: 2Gi (2,147,483,648 bytes)
+```
+
+</div>
+
+<!--
+Expected output explanation:
+- Shows real snapshot-metadata-lister table format
+- Lists all allocated blocks with ByteOffset and SizeBytes
+- 100 blocks of 4096 bytes each = 409,600 bytes (~400KB)
+- Only ~0.02% of 2Gi volume is allocated (demonstrates sparse region efficiency)
+- FIXED_LENGTH format with 4096-byte block granularity
+- This is what backup tools would receive from production CSI drivers
+-->
+
+---
 
 # Demo Workflow (cont.)
 
@@ -452,7 +490,7 @@ Phase 3 - Full backup demonstration:
 10. **Write Additional Data**
     ```bash
     dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100
-    # Writes 100 more blocks (~10MB)
+    # Writes 100 more blocks (~400KB)
     ```
 
 11. **Create Second Snapshot**
@@ -461,17 +499,19 @@ Phase 3 - Full backup demonstration:
     ```
     Snapshot created in **~3.7s**
 
-12. **Call GetMetadataDelta API**
+12. **Call GetMetadataDelta API with CSI Handle**
     ```bash
-    # Using snapshot names
-    kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-      -p block-snapshot-1 -s block-snapshot-2 -n cbt-demo
+    # Get CSI snapshot handle from VolumeSnapshotContent
+    VSC=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo \
+      -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+    HANDLE=$(kubectl get volumesnapshotcontent $VSC \
+      -o jsonpath="{.status.snapshotHandle}")
 
-    # Using CSI handle (PR #180)
+    # Call GetMetadataDelta using CSI handle (PR #180)
     kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-      -P <snap-handle> -s block-snapshot-2 -n cbt-demo
+      -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
     ```
-    Reports only **changed blocks** between snapshots
+    Reports only **changed blocks** using base snapshot CSI handle
 
 </v-clicks>
 
@@ -481,11 +521,54 @@ Phase 3 - Full backup demonstration:
 Phase 4 - Incremental backup demonstration:
 - Write 100 more blocks to raw device to simulate data changes
 - Second snapshot creation is similar speed (~3.7s)
-- Two ways to call GetMetadataDelta:
-  1. Using snapshot names (simpler, but requires base snapshot to exist)
-  2. Using CSI handle via PR #180 (allows base snapshot deletion)
-- This is the key efficiency gain - only ~10MB delta transferred instead of full ~20MB
+- Uses CSI handle approach (PR #180) instead of snapshot names
+- Key benefit: Base snapshot can be deleted after getting handle (saves storage)
+- First get VolumeSnapshotContent to extract CSI snapshot handle
+- Then call GetMetadataDelta with handle (-P flag) + target snapshot name
+- This is the key efficiency gain - only ~400KB delta transferred instead of full ~800KB
 - Real-world: This scales to TBs of data with MB of changes
+-->
+
+---
+layout: default
+---
+
+# Phase 4: Expected Output
+
+<div class="text-sm">
+
+## GetMetadataDelta API Response
+
+**Expected output** (with production CSI driver supporting CBT):
+
+```text
+Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes
+------- -------------- ----------------- -------------- --------------
+      1     2147483648      FIXED_LENGTH         409600           4096
+      1     2147483648      FIXED_LENGTH         413696           4096
+      1     2147483648      FIXED_LENGTH         417792           4096
+      1     2147483648      FIXED_LENGTH         421888           4096
+      1     2147483648      FIXED_LENGTH         425984           4096
+      ... (95 more blocks)
+
+Total: 100 changed blocks (409,600 bytes = ~400KB delta)
+Base Snapshot Handle: 7c0d6daa-1e9d-11ee-8f2a-0242ac110002
+Target Snapshot: block-snapshot-2
+
+Note: Base snapshot can be deleted after obtaining handle
+```
+
+</div>
+
+<!--
+Expected output explanation:
+- Shows real snapshot-metadata-lister delta table format
+- Lists only changed blocks with ByteOffset starting at 409600
+- 100 new blocks at offset 409600 (after the first 100 blocks: 100 × 4096 = 409600)
+- Only ~400KB delta instead of ~800KB full backup (50% efficiency)
+- With PR #180, base snapshot handle can be used even if snapshot deleted
+- This is the key CBT benefit - incremental backups transfer only changes
+- ByteOffset increments by 4096 for each sequential block
 -->
 
 ---
@@ -583,23 +666,25 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 **Workflow Demonstration** (Phase 4):
 
-1. Insert 100 additional rows (~10MB data)
+1. Write 100 additional blocks (~400KB data)
 2. Create block-snapshot-2
 3. Query `GetMetadataDelta` comparing snapshots
 4. Returns only changed blocks
 
-**API Calls in Workflow:**
+**API Call in Workflow:**
 ```bash
-# Using snapshot names
-kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -p block-snapshot-1 -s block-snapshot-2 -n cbt-demo
+# Get CSI snapshot handle
+VSC=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo \
+  -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+HANDLE=$(kubectl get volumesnapshotcontent $VSC \
+  -o jsonpath="{.status.snapshotHandle}")
 
-# Using CSI handle (PR #180 enhancement)
+# Call GetMetadataDelta using CSI handle (PR #180)
 kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -P <snap-handle> -s block-snapshot-2 -n cbt-demo
+  -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
 ```
 
-**Benefits**: Only transfer changed blocks (~10MB delta)
+**Benefits**: Only transfer changed blocks (~400KB delta), base snapshot can be deleted after getting handle
 
 </v-clicks>
 
@@ -658,43 +743,7 @@ layout: default
 
 <div class="text-sm">
 
-# CBT API Demo - GetMetadataDelta (Names)
-
-<div class="text-xs mb-2 opacity-70">
-Note: CBT API is currently in alpha and subject to change
-</div>
-
-<v-clicks depth="2">
-
-## GetMetadataDelta - Using Snapshot Names
-
-**Workflow Step**: Phase 4 - After creating block-snapshot-2
-
-**API Call**:
-```bash
-kubectl exec -n cbt-demo csi-client -- \
-  /tools/snapshot-metadata-lister \
-  -p block-snapshot-1 \
-  -s block-snapshot-2 \
-  -n cbt-demo
-```
-
-**What it does**:
-- Compares two snapshots by name
-- Returns only changed blocks between snapshots
-- Reports delta: **~10MB** (100 new rows)
-
-</v-clicks>
-
-</div>
-
----
-layout: default
----
-
-<div class="text-sm">
-
-# CBT API Demo - GetMetadataDelta (Handle)
+# CBT API Demo - GetMetadataDelta
 
 <div class="text-xs mb-2 opacity-70">
 Note: CBT API is currently in alpha and subject to change
@@ -721,7 +770,7 @@ kubectl exec -n cbt-demo csi-client -- \
   -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
 ```
 
-Reports **only changed blocks** (100 new rows, ~10MB)
+Reports **only changed blocks** (100 new blocks, ~400KB)
 
 </v-clicks>
 
@@ -816,8 +865,8 @@ Checks: Snapshot checksums • Block-level consistency • Block device data •
 | Check | Snapshot 1 | Snapshot 2 |
 |-------|-----------|-----------|
 | Blocks | 100 | 200 |
-| Size | ~10MB | ~20MB |
-| Delta | - | ~10MB |
+| Size | ~400KB | ~800KB |
+| Delta | - | ~400KB |
 | Checksum | ✓ MD5 | ✓ MD5 |
 
 </div>
@@ -982,8 +1031,8 @@ layout: default
 
 | Snapshot | Data | Creation Time | Status |
 |----------|------|---------------|--------|
-| block-snapshot-1 | 100 blocks (~10MB) | **~4s** | ✓ Ready |
-| block-snapshot-2 | 200 blocks (~20MB) | **~4s** | ✓ Ready |
+| block-snapshot-1 | 100 blocks (~400KB) | **~4s** | ✓ Ready |
+| block-snapshot-2 | 200 blocks (~800KB) | **~4s** | ✓ Ready |
 
 </v-clicks>
 
@@ -994,7 +1043,7 @@ Actual results from CI run #87:
 - Full infrastructure deployed successfully in Minikube
 - Snapshot creation is very fast (~4s per snapshot)
 - Using canary builds for latest CBT features (PR #180)
-- Real data: 100 blocks → 200 blocks, ~10MB → ~20MB
+- Real data: 100 blocks → 200 blocks, ~400KB → ~800KB
 - Emphasize: This is a real, reproducible demo running in CI
 -->
 
@@ -1052,7 +1101,7 @@ class: text-center
 
 1. ✅ Kubernetes CSI snapshots with CBT support
 2. ✅ Changed block tracking between snapshots
-3. ✅ Efficient delta backup (~10MB vs ~20MB full)
+3. ✅ Efficient delta backup (~400KB vs ~800KB full)
 4. ✅ S3-compatible storage integration
 5. ✅ Real workload (block-writer) testing
 6. ✅ Automated CI/CD validation
