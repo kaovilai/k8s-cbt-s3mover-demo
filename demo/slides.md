@@ -45,11 +45,14 @@ layout: full
 ## What is CBT?
 
 Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
-
 </v-click>
+
+<table style="padding:0">
+<tr style="padding:0">
+<td style="padding:0">
 <v-click>
 
-<div class="text-sm mt-4 p-3 bg-blue-900 bg-opacity-30 rounded">
+<div style="padding:0" class="text-sm mt-4 p-3 bg-blue-900 bg-opacity-30 rounded">
 
 ### 📅 Adoption Timeline
 
@@ -61,28 +64,25 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 </div>
 
 </v-click>
-<v-click>
-<table>
-<tr>
-<td>
 
-## Key Benefits
+<v-click>
+
+### Key Benefits
 
 - ⏱️ **Shorter Backup Windows** - Hours to minutes for large datasets
+- 🎯 **Smart Initial Backups** - Only allocated blocks transferred (not empty space)
 - 📉 **Reduced Resource Usage** - Less network bandwidth and I/O
-- 💰 **Lower Storage Costs** - Avoid redundant full backups
-- 🔄 **Incremental Backups** - Only transfer changed blocks
+- 💰 **Lower Storage Costs** - No redundant full backups needed
+- 🔄 **True Incremental Backups** - Only changed blocks after initial
 
 <div class="text-sm mt-4 p-2 bg-yellow-900 bg-opacity-20 rounded">
 
 ⚠️ **Note**: CBT is supported only for **block volumes**, not file volumes
-
 </div>
-
+</v-click>
 </td>
 <td>
-
-
+<v-click>
 ```mermaid {scale:0.5}
 graph TB
     PVC[PVC: Block Device]
@@ -100,12 +100,10 @@ graph TB
     style CBT fill:#f96,stroke:#333
     style S3 fill:#9f6,stroke:#333
 ```
-
-
+</v-click>
 </td>
 </tr>
 </table>
-</v-click>
 
 <!--
 Key points to emphasize:
@@ -121,124 +119,59 @@ Key points to emphasize:
 layout: two-cols
 ---
 
-# CBT with Different Application Types
+# User Stories
+
+## 📦 Full Snapshot Backup
 
 <v-click>
 
-## 🔧 Applications That Need Quiescing
+**Actor**: Backup Application
+**Goal**: Initial backup of 1TB block volume
 
-**Databases** (PostgreSQL, MySQL)
+**Workflow**:
+1. Create VolumeSnapshot of target PVC
+2. Query `GetMetadataAllocated` API
+3. Receive allocated blocks list (e.g., 400GB)
+4. Mount snapshot as block PVC in pod
+5. Transfer only allocated blocks to S3
 
-```bash
-# Write to database
-kubectl exec postgres-0 -- psql -c \
-  "INSERT INTO demo_data ..."
-# Data in page cache, not visible to CBT
-```
-
-**Issue**: Page cache delay (5-30s)
-
-**Fix**: Velero pre-hooks for flush
+**Result**: Back up 400GB instead of 1TB
+**Benefit**: 60% reduction in transfer time
 
 </v-click>
 
 ::right::
 
+## 🔄 Incremental Snapshot Backup
+
 <v-click>
 
-## ⚡ Direct Block I/O Applications
+**Actor**: Backup Application
+**Goal**: Daily backup after data changes
 
-### Immediate CBT Visibility
+**Workflow**:
+1. Create new VolumeSnapshot
+2. Query `GetMetadataDelta(base, new)`
+3. Receive changed blocks (e.g., 50GB)
+4. Mount latest snapshot in pod
+5. Transfer only delta blocks to S3
 
-```bash
-# Write to raw device
-dd if=/dev/urandom of=/dev/xvdb \
-  bs=4096 count=100
-
-# Snapshot → metadata → blocks
-kubectl create -f snapshot.yaml
-```
-
-**Results**:
-
-- Initial: **100 blocks** ✅
-- Delta: **80 changed** ✅
+**Result**: Back up 50GB instead of 400GB
+**Benefit**: 87.5% reduction in transfer time
 
 </v-click>
 
 <!--
-Real-world CBT considerations:
-- LEFT SIDE: Some applications need quiescing before snapshots (databases with filesystem layers)
-- Emphasize: This is normal - backup tools like Velero provide hooks for this
-- Show the Velero YAML example: CHECKPOINT + pg_switch_wal() flushes pages to disk
-- RIGHT SIDE: Applications using direct block I/O don't need quiescing
-- Raw block device writes tracked immediately: 100 blocks initially, 80 changed blocks in delta
-- This validates that CBT works at the block layer
-- Key takeaway: Choose the right approach - direct I/O OR quiescing hooks with backup tools
+User stories provide practical context:
+- Full backup: Shows sparse region skipping (400GB used in 1TB volume)
+- Incremental: Shows delta efficiency (50GB changes vs 400GB full)
+- Both demonstrate GetMetadataAllocated and GetMetadataDelta APIs
+- Real-world numbers help audience understand impact
+- Sets up Production Implications slide that follows
 -->
 
 ---
-layout: default
----
-
-# Filesystem Abstraction Layers
-
-<div class="text-xs">
-<table>
-<tr>
-<td>
-<v-clicks>
-
-**PostgreSQL Invisible**: Page cache delay (5-30s) + ext4 fragmentation → CBT sees mostly zeros
-
-**Raw Block Works**: Direct I/O bypasses filesystem/cache → Immediate CBT visibility
-
-</v-clicks>
-</td>
-<td>
-```mermaid {theme: 'neutral', scale: 0.4}
-graph TB
-    subgraph app["Application Layer"]
-        PG[PostgreSQL<br/>write syscall]
-    end
-
-    subgraph fs["Filesystem Layer (ext4)"]
-        INODE[Inode Metadata]
-        JOURNAL[Journal]
-        DIRTY[Mark Dirty Pages]
-    end
-
-    subgraph cache["Page Cache (INVISIBLE TO CBT)"]
-        PC[Dirty Pages<br/>5-30 second window]
-        BDFLUSH[Background Flush<br/>bdflush/pdflush]
-    end
-
-    subgraph block["Block Device Layer (VISIBLE TO CBT)"]
-        BD[Raw Block I/O]
-        CBT[CBT Tracking]
-    end
-
-    PG --> INODE
-    INODE --> DIRTY
-    DIRTY --> PC
-    PC --> BDFLUSH
-    BDFLUSH --> BD
-    BD --> CBT
-
-    style cache fill:#f99,stroke:#333,stroke-width:3px
-    style CBT fill:#9f6,stroke:#333
-
-    classDef invisible fill:#f99,stroke:#333
-    class cache invisible
-```
-</td>
-</tr>
-</table>
-
-</div>
-
----
-layout: default
+layout: two-cols
 ---
 
 # Production Implications
@@ -257,6 +190,12 @@ layout: default
 - Similar for MySQL (`FLUSH TABLES`), MongoDB (`fsync`)
 - ⚠️ Adds latency, requires app coordination
 
+</v-clicks>
+
+::right::
+
+<v-clicks depth="2">
+
 **Option 3: Accept Limitations**
 - Use CBT for block-level tracking only
 - Understand filesystem changes may be delayed
@@ -264,7 +203,9 @@ layout: default
 
 ## Key Takeaway
 
-**CBT requires `volumeMode: Block` for accurate change tracking** - this is why our demo uses raw block device writes instead of PostgreSQL for demonstration.
+**CBT requires `volumeMode: Block` for accurate change tracking**
+
+This is why our demo uses raw block device writes instead of PostgreSQL for demonstration.
 
 </v-clicks>
 
