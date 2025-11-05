@@ -27,7 +27,7 @@ Efficient Backup with Changed Block Tracking
 <!--
 Welcome! This presentation demonstrates Changed Block Tracking (CBT) in Kubernetes.
 - Introduce yourself and your role
-- Mention timeline: K8s 1.33 alpha, OCP 4.20 tech preview, K8s 1.36 proposed beta
+- Mention timeline: K8s 1.33 alpha, OCP 4.20 DevPreviewNoUpgrade, K8s 1.36 proposed beta
 - Set expectations: ~25 minute talk with technical deep-dive
 - Audience: DevOps engineers, backup admins, K8s storage users
 -->
@@ -57,7 +57,7 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 ### 📅 Adoption Timeline
 
 - **K8s 1.33** - Alpha (no feature gate required)
-- **OCP 4.20** - Tech Preview (feature gate enabled)
+- **OCP 4.20** - DevPreviewNoUpgrade (feature gate enabled)
 - **K8s 1.36** - Proposed Beta target
 - **OCP 5.0** - Expected to include K8s 1.36 beta
 
@@ -107,7 +107,7 @@ graph TB
 
 <!--
 Key points to emphasize:
-- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 tech preview
+- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 DevPreviewNoUpgrade
 - Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
 - Benefits: Highlight the time savings (hours to minutes) for large datasets
 - Note the block volume requirement - this is critical!
@@ -167,59 +167,6 @@ User stories provide practical context:
 - Incremental: Shows delta efficiency (50GB changes vs 400GB full)
 - Both demonstrate GetMetadataAllocated and GetMetadataDelta APIs
 - Real-world numbers help audience understand impact
-- Sets up Production Implications slide that follows
--->
-
----
-layout: two-cols
----
-
-# Production Implications
-
-<v-clicks depth="2">
-
-## Using CBT in Production
-
-**Option 1: Raw Block Devices**
-- Databases with DirectIO (Cassandra, MongoDB, ScyllaDB)
-- Applications designed for block storage
-- ✅ Full CBT visibility
-
-**Option 2: Filesystem with Sync (Velero Hooks)**
-- Velero pre-hooks flush pages: `CHECKPOINT; pg_switch_wal()`
-- Similar for MySQL (`FLUSH TABLES`), MongoDB (`fsync`)
-- ⚠️ Adds latency, requires app coordination
-
-</v-clicks>
-
-::right::
-
-<v-clicks depth="2">
-
-**Option 3: Accept Limitations**
-- Use CBT for block-level tracking only
-- Understand filesystem changes may be delayed
-- ⚠️ Snapshot timing becomes critical
-
-## Key Takeaway
-
-**CBT requires `volumeMode: Block` for accurate change tracking**
-
-This is why our demo uses raw block device writes instead of PostgreSQL for demonstration.
-
-</v-clicks>
-
-<!--
-Production considerations:
-- Option 1 (Raw Block): Best for CBT - databases like Cassandra, MongoDB, ScyllaDB already use DirectIO
-- Option 2 (Velero Hooks): Most practical for existing PostgreSQL/MySQL deployments
-  - Show the YAML example: Velero pre.hook.backup annotations
-  - CHECKPOINT forces dirty pages to disk, pg_switch_wal() ensures WAL flush
-  - Works with filesystem volumes + CBT for accurate change tracking
-  - Similar hooks exist for MySQL (FLUSH TABLES WITH READ LOCK), MongoDB (fsync)
-- Option 3 (Accept Limitations): Understand snapshot timing is critical
-- Emphasize: This is an alpha feature, CSI driver support varies
-- Most cloud CSI drivers (EBS, Azure Disk) don't support CBT yet - hostpath is currently the only example
 -->
 
 ---
