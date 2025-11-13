@@ -8,7 +8,7 @@ echo "=========================================="
 echo "Restore from Snapshot"
 echo "=========================================="
 echo ""
-echo "This will restore PostgreSQL from snapshot: $SNAPSHOT_NAME"
+echo "This will restore the block-writer workload from snapshot: $SNAPSHOT_NAME"
 echo ""
 
 # Check if snapshot exists
@@ -22,173 +22,134 @@ fi
 
 # Get snapshot details
 SNAPSHOT_SIZE=$(kubectl get volumesnapshot "$SNAPSHOT_NAME" -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
-SOURCE_PVC=$(kubectl get volumesnapshot "$SNAPSHOT_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.source.persistentVolumeClaimName}')
+SNAPSHOT_READY=$(kubectl get volumesnapshot "$SNAPSHOT_NAME" -n "$NAMESPACE" -o jsonpath='{.status.readyToUse}')
 
 echo "Snapshot Details:"
 echo "  Name:        $SNAPSHOT_NAME"
 echo "  Size:        $SNAPSHOT_SIZE"
-echo "  Source PVC:  $SOURCE_PVC"
+echo "  Ready:       $SNAPSHOT_READY"
 echo ""
+
+if [ "$SNAPSHOT_READY" != "true" ]; then
+    echo "Error: Snapshot is not ready to use"
+    exit 1
+fi
+
 read -r -p "Press Enter to continue with restore..."
 
-# Restore PostgreSQL StatefulSet (it will create PVCs from snapshot)
+# Step 1: Create PVC from snapshot
 echo ""
-echo "[1/3] Recreating PostgreSQL StatefulSet with snapshot restore..."
+echo "[1/3] Creating PVC from snapshot..."
 
 kubectl apply -f - <<EOF
-apiVersion: apps/v1
-kind: StatefulSet
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: postgres
+  name: block-writer-data
   namespace: $NAMESPACE
-  labels:
-    app: postgres
 spec:
-  serviceName: postgres
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      securityContext:
-        fsGroup: 999
-      initContainers:
-      - name: format-block-device
-        image: busybox:1.36
-        command: ['sh', '-c']
-        args:
-          - |
-            if ! blkid /dev/xvda; then
-              echo "Formatting block device..."
-              mkfs.ext4 -F /dev/xvda
-            fi
-            mkdir -p /mnt/data
-            mount /dev/xvda /mnt/data
-            chmod 777 /mnt/data
-            umount /mnt/data
-        securityContext:
-          privileged: true
-        volumeDevices:
-        - name: postgres-data
-          devicePath: /dev/xvda
-      containers:
-      - name: postgres
-        image: postgres:16-alpine
-        env:
-        - name: POSTGRES_DB
-          value: cbtdemo
-        - name: POSTGRES_USER
-          value: demo
-        - name: POSTGRES_PASSWORD
-          value: demopassword
-        - name: PGDATA
-          value: /mnt/pgdata
-        ports:
-        - containerPort: 5432
-          name: postgres
-        command: ['sh', '-c']
-        args:
-          - |
-            mkdir -p /mnt/data
-            mount /dev/xvda /mnt/data
-            mkdir -p /mnt/pgdata
-            chown -R postgres:postgres /mnt/pgdata
-            exec docker-entrypoint.sh postgres
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        volumeDevices:
-        - name: postgres-data
-          devicePath: /dev/xvda
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pg_isready -U demo
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - pg_isready -U demo
-          initialDelaySeconds: 10
-          periodSeconds: 5
-  volumeClaimTemplates:
-  - metadata:
-      name: postgres-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      volumeMode: Block
-      storageClassName: csi-hostpath-sc
-      dataSource:
-        name: $SNAPSHOT_NAME
-        kind: VolumeSnapshot
-        apiGroup: snapshot.storage.k8s.io
-      resources:
-        requests:
-          storage: $SNAPSHOT_SIZE
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Block
+  storageClassName: csi-hostpath-sc
+  dataSource:
+    name: $SNAPSHOT_NAME
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  resources:
+    requests:
+      storage: $SNAPSHOT_SIZE
 EOF
 
-echo "✓ StatefulSet created with snapshot restore"
+echo "  Waiting for PVC to be bound..."
+kubectl wait --for=jsonpath='{.status.phase}'=Bound \
+  pvc/block-writer-data -n "$NAMESPACE" --timeout=300s
 
-# Wait for PostgreSQL to be ready
+echo "✓ PVC created from snapshot and bound"
+
+# Step 2: Deploy block-writer pod
 echo ""
-echo "[2/3] Waiting for PostgreSQL to be ready..."
-kubectl wait --for=condition=Ready pod -l app=block-writer -n "$NAMESPACE" --timeout=300s
+echo "[2/3] Deploying block-writer pod..."
 
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
-echo "✓ PostgreSQL pod is ready: $POSTGRES_POD"
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: block-writer
+  namespace: $NAMESPACE
+  labels:
+    app: block-writer
+spec:
+  containers:
+  - name: writer
+    image: busybox:1.36
+    command: ['sh', '-c', 'while true; do sleep 3600; done']
+    securityContext:
+      privileged: true
+    volumeDevices:
+    - name: data
+      devicePath: /dev/xvda
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: block-writer-data
+EOF
 
-# Verify data
+echo "  Waiting for pod to be ready..."
+kubectl wait --for=condition=Ready pod/block-writer -n "$NAMESPACE" --timeout=300s
+
+echo "✓ Block-writer pod is ready"
+
+# Step 3: Verify data
 echo ""
 echo "[3/3] Verifying restored data..."
-sleep 5  # Give PostgreSQL a moment to fully start
 
-RESTORED_ROWS=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c "SELECT COUNT(*) FROM demo_data;" 2>/dev/null | tr -d ' ')
+# Compute checksum of restored data (first 1MB)
+RESTORED_CHECKSUM=$(kubectl exec -n "$NAMESPACE" block-writer -- dd if=/dev/xvda bs=4096 count=256 2>/dev/null | md5sum | awk '{print $1}')
 
 echo ""
 echo "=========================================="
 echo "Restore Complete!"
 echo "=========================================="
 echo ""
-echo "PostgreSQL Status:"
-echo "  Pod:     $POSTGRES_POD"
-echo "  Status:  Running"
-echo "  Rows:    $RESTORED_ROWS"
+echo "Block-writer Status:"
+echo "  Pod:       block-writer"
+echo "  Namespace: $NAMESPACE"
+echo "  Status:    Running"
+echo "  Checksum:  $RESTORED_CHECKSUM (first 1MB of device)"
 echo ""
 
 # Compare with pre-disaster state if available
-if [ -f /tmp/cbt-demo-pre-disaster-rows.txt ]; then
-    PRE_DISASTER_ROWS=$(cat /tmp/cbt-demo-pre-disaster-rows.txt)
-    echo "Pre-disaster rows:  $PRE_DISASTER_ROWS"
-    echo "Restored rows:      $RESTORED_ROWS"
+if [ -f /tmp/cbt-demo-pre-disaster-checksum.txt ]; then
+    PRE_DISASTER_CHECKSUM=$(cat /tmp/cbt-demo-pre-disaster-checksum.txt)
+    echo "Pre-disaster checksum:  $PRE_DISASTER_CHECKSUM"
+    echo "Restored checksum:      $RESTORED_CHECKSUM"
     echo ""
-    if [ "$RESTORED_ROWS" == "$PRE_DISASTER_ROWS" ]; then
-        echo "✓ Data restored successfully! Row count matches pre-disaster state."
+    if [ "$RESTORED_CHECKSUM" == "$PRE_DISASTER_CHECKSUM" ]; then
+        echo "✓ Data restored successfully! Checksum matches pre-disaster state."
     else
-        echo "⚠ Row count mismatch. This may be expected if you restored from an earlier snapshot."
+        echo "⚠ Checksum mismatch. This may be expected if you restored from an earlier snapshot."
+        echo "  Each snapshot captures the device state at a different point in time."
     fi
 else
-    echo "Pre-disaster state not found. Cannot compare row counts."
+    echo "Pre-disaster state not found. Cannot compare checksums."
+    echo "(Run ./scripts/05-simulate-disaster.sh to save pre-disaster state)"
 fi
 
 echo ""
-echo "To verify data integrity:"
+echo "To verify the block device:"
+echo "  kubectl exec -n $NAMESPACE block-writer -- dd if=/dev/xvda bs=4096 count=100 | hexdump -C | head -20"
+echo ""
+echo "To run verification script:"
 echo "  ./scripts/07-verify.sh"
 echo ""
-echo "To connect to the database:"
-echo "  kubectl exec -it -n $NAMESPACE $POSTGRES_POD -- psql -U demo -d cbtdemo"
+echo "To write more data and create another snapshot:"
+echo "  kubectl exec -n $NAMESPACE block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4096 count=100"
+echo "  kubectl apply -f <snapshot-manifest>"
