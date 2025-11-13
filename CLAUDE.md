@@ -280,6 +280,34 @@ minikube start --driver=podman --container-runtime=containerd
 PATH="$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:$PATH"
 ```
 
+**OpenShift Requirements**: The demo requires privileged pods for raw block device access. OpenShift namespaces enforce `restricted` PodSecurity policies by default. The deployment script ([scripts/02-deploy-minio.sh](scripts/02-deploy-minio.sh)) automatically detects OpenShift and configures the namespace:
+
+1. **Auto-detection**: Checks for SecurityContextConstraints API resource
+2. **Namespace labeling**: Sets `pod-security.kubernetes.io/enforce=privileged`
+3. **SCC assignment**: Grants `privileged` SCC to default service account
+
+Manual configuration (if needed):
+```bash
+# Label namespace for privileged pods
+kubectl label namespace cbt-demo \
+  pod-security.kubernetes.io/enforce=privileged \
+  pod-security.kubernetes.io/audit=privileged \
+  pod-security.kubernetes.io/warn=privileged \
+  --overwrite
+
+# Grant privileged SCC (requires oc CLI)
+oc adm policy add-scc-to-user privileged -z default -n cbt-demo
+```
+
+**Tested On:**
+- ✅ OpenShift 4.21 (Kubernetes 1.34.1) on AWS ARM64
+- ✅ Vanilla Kubernetes 1.33+ (Minikube, cloud providers)
+
+**Known Limitations on ARM64:**
+- CSI snapshot metadata readiness probe fails (container remains functional)
+- `grpc_health_probe` binary in upstream images is AMD64-only
+- Impact: Low - pod shows 8/9 containers ready but CBT functionality works correctly
+
 ### CI/CD Workflows
 
 - `.github/workflows/demo.yaml`: Main workflow with Minikube or BYOC (Bring Your Own Cluster)
