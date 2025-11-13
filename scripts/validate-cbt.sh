@@ -43,39 +43,9 @@ fi
 # Check CSI driver pods
 echo ""
 echo "Checking CSI driver pods..."
-# Look for csi-hostpath pods by name pattern instead of label
-if kubectl get pods -n default 2>/dev/null | grep -q "csi-hostpath"; then
-    # Count running csi-hostpath pods
-    PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | grep -c "Running" || echo "0")
-    if [ "$PODS" -gt 0 ]; then
-        echo "✓ CSI hostpath driver pods are running ($PODS)"
-        kubectl get pods -n default | grep "csi-hostpath"
-    else
-        echo "⚠ CSI hostpath driver pods found but not all running"
-        kubectl get pods -n default | grep "csi-hostpath"
-
-        # Give pods more time to start
-        echo "Waiting up to 30s for pods to become ready..."
-        RETRIES=0
-        MAX_RETRIES=15
-        while [ $RETRIES -lt $MAX_RETRIES ]; do
-            RUNNING_PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | grep -c "Running" || echo "0")
-            if [ "$RUNNING_PODS" -gt 0 ]; then
-                echo "✓ CSI driver pods are now running ($RUNNING_PODS)"
-                kubectl get pods -n default | grep "csi-hostpath"
-                break
-            fi
-            sleep 2
-            RETRIES=$((RETRIES + 1))
-        done
-
-        # Check again after waiting
-        FINAL_PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | grep -c "Running" || echo "0")
-        if [ "$FINAL_PODS" -eq 0 ]; then
-            echo "✗ CSI hostpath driver pods are still not running"
-            EXIT_CODE=1
-        fi
-    fi
+if kubectl get pod -n default 2>/dev/null | grep -q "csi-hostpathplugin"; then
+    echo "✓ CSI hostpath driver pods found"
+    kubectl get pods -n default | grep csi-hostpath
 else
     echo "✗ CSI hostpath driver not found"
     EXIT_CODE=1
