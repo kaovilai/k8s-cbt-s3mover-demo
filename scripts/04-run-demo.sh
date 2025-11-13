@@ -6,16 +6,20 @@ echo "Complete CBT Demo Workflow"
 echo "=========================================="
 echo ""
 echo "This script will demonstrate the complete Changed Block Tracking workflow:"
-echo "1. Create initial snapshot (full backup)"
-echo "2. Add more data to PostgreSQL"
-echo "3. Create second snapshot (incremental backup)"
-echo "4. Add even more data"
-echo "5. Create third snapshot (incremental backup)"
-echo "6. Verify all snapshots and backups"
+echo "1. Write initial data to block device (400KB)"
+echo "2. Create first snapshot (full backup)"
+echo "3. Write incremental data (800KB)"
+echo "4. Create second snapshot (incremental backup)"
+echo "5. Write more data (1.2MB)"
+echo "6. Create third snapshot (incremental backup)"
+echo "7. Verify all snapshots"
 echo ""
 read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
 NAMESPACE="cbt-demo"
+POD_NAME="block-writer"
+PVC_NAME="block-writer-data"
+DEVICE="/dev/xvda"
 
 # Check if infrastructure is running
 echo ""
@@ -29,29 +33,27 @@ if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
     exit 1
 fi
 
-if ! kubectl get pod -n "$NAMESPACE" -l app=block-writer --no-headers | grep -q Running; then
-    echo "Error: PostgreSQL pod is not running"
+if ! kubectl get pod -n "$NAMESPACE" "$POD_NAME" --no-headers 2>/dev/null | grep -q Running; then
+    echo "Error: Block-writer pod is not running"
+    echo "Deploy the workload first: ./scripts/03-deploy-workload.sh"
     exit 1
 fi
 
 echo "✓ Infrastructure is ready"
-
-# Get PostgreSQL pod name
-POSTGRES_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
-PVC_NAME="postgres-data-$POSTGRES_POD"
-
-echo "  PostgreSQL Pod: $POSTGRES_POD"
+echo "  Pod: $POD_NAME"
 echo "  PVC: $PVC_NAME"
+echo "  Device: $DEVICE"
 
-# Check initial data
+# Step 1: Write initial data (100 blocks = 400KB)
 echo ""
-echo "[Step 1] Checking initial data..."
-INITIAL_ROWS=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c "SELECT COUNT(*) FROM demo_data;" | tr -d ' ')
-echo "  Initial rows: $INITIAL_ROWS"
+echo "[Step 1] Writing initial data to block device..."
+echo "  Writing 100 blocks (400KB) at offset 0..."
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if=/dev/urandom of="$DEVICE" bs=4096 count=100 seek=0 conv=notrunc 2>&1 | grep -E "copied|records"
+echo "✓ Wrote 100 blocks (400KB) starting at offset 0"
 
-# Create first snapshot (full backup)
+# Step 2: Create first snapshot (full backup)
 echo ""
-echo "[Step 2] Creating first snapshot (full backup)..."
+echo "[Step 2] Creating first snapshot (baseline)..."
 kubectl apply -f - <<EOF
 apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshot
@@ -69,22 +71,16 @@ kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
   volumesnapshot/block-snapshot-1 -n "$NAMESPACE" --timeout=300s
 
 SNAP1_SIZE=$(kubectl get volumesnapshot block-snapshot-1 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
-echo "✓ Snapshot 1 created (size: $SNAP1_SIZE)"
+echo "✓ Snapshot 1 created and ready (size: $SNAP1_SIZE)"
 
-# Add more data (blocks 1001-1100)
+# Step 3: Write incremental data (200 blocks = 800KB)
 echo ""
-echo "[Step 3] Adding more data (100 blocks)..."
-kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -c "
-INSERT INTO demo_data (data_block, content, checksum)
-SELECT generate_series(1001, 1100),
-       encode(gen_random_bytes(100000), 'base64'),
-       md5(random()::text);
-" >/dev/null
+echo "[Step 3] Writing incremental data to block device..."
+echo "  Writing 200 blocks (800KB) at offset 409600 (100 blocks)..."
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if=/dev/urandom of="$DEVICE" bs=4096 count=200 seek=100 conv=notrunc 2>&1 | grep -E "copied|records"
+echo "✓ Wrote 200 blocks (800KB) starting at offset 409600"
 
-AFTER_INSERT1=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c "SELECT COUNT(*) FROM demo_data;" | tr -d ' ')
-echo "✓ Added $((AFTER_INSERT1 - INITIAL_ROWS)) new rows (total: $AFTER_INSERT1)"
-
-# Create second snapshot (incremental)
+# Step 4: Create second snapshot (incremental)
 echo ""
 echo "[Step 4] Creating second snapshot (incremental)..."
 kubectl apply -f - <<EOF
@@ -104,22 +100,16 @@ kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
   volumesnapshot/block-snapshot-2 -n "$NAMESPACE" --timeout=300s
 
 SNAP2_SIZE=$(kubectl get volumesnapshot block-snapshot-2 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
-echo "✓ Snapshot 2 created (size: $SNAP2_SIZE)"
+echo "✓ Snapshot 2 created and ready (size: $SNAP2_SIZE)"
 
-# Add even more data (blocks 1101-1300)
+# Step 5: Write even more data (300 blocks = 1.2MB)
 echo ""
-echo "[Step 5] Adding even more data (200 blocks)..."
-kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -c "
-INSERT INTO demo_data (data_block, content, checksum)
-SELECT generate_series(1101, 1300),
-       encode(gen_random_bytes(100000), 'base64'),
-       md5(random()::text);
-" >/dev/null
+echo "[Step 5] Writing more data to block device..."
+echo "  Writing 300 blocks (1.2MB) at offset 1228800 (300 blocks)..."
+kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if=/dev/urandom of="$DEVICE" bs=4096 count=300 seek=300 conv=notrunc 2>&1 | grep -E "copied|records"
+echo "✓ Wrote 300 blocks (1.2MB) starting at offset 1228800"
 
-AFTER_INSERT2=$(kubectl exec -n "$NAMESPACE" "$POSTGRES_POD" -- psql -U demo -d cbtdemo -t -c "SELECT COUNT(*) FROM demo_data;" | tr -d ' ')
-echo "✓ Added $((AFTER_INSERT2 - AFTER_INSERT1)) new rows (total: $AFTER_INSERT2)"
-
-# Create third snapshot (incremental)
+# Step 6: Create third snapshot (incremental)
 echo ""
 echo "[Step 6] Creating third snapshot (incremental)..."
 kubectl apply -f - <<EOF
@@ -139,17 +129,22 @@ kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
   volumesnapshot/block-snapshot-3 -n "$NAMESPACE" --timeout=300s
 
 SNAP3_SIZE=$(kubectl get volumesnapshot block-snapshot-3 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
-echo "✓ Snapshot 3 created (size: $SNAP3_SIZE)"
+echo "✓ Snapshot 3 created and ready (size: $SNAP3_SIZE)"
 
-# Show all snapshots
+# Step 7: Show all snapshots
 echo ""
 echo "[Step 7] Snapshot Summary"
 echo "=========================================="
-kubectl get volumesnapshot -n "$NAMESPACE" -o custom-columns=\
-NAME:.metadata.name,\
-READY:.status.readyToUse,\
-SIZE:.status.restoreSize,\
-AGE:.metadata.creationTimestamp
+kubectl get volumesnapshot -n "$NAMESPACE"
+
+echo ""
+echo "VolumeSnapshotContent details:"
+kubectl get volumesnapshotcontent | grep -E "NAME|$NAMESPACE"
+
+# Calculate total data written
+TOTAL_BLOCKS=600
+TOTAL_KB=$((TOTAL_BLOCKS * 4))
+TOTAL_MB=$((TOTAL_KB / 1024))
 
 echo ""
 echo "=========================================="
@@ -158,16 +153,21 @@ echo "=========================================="
 echo ""
 echo "What was created:"
 echo "  - 3 VolumeSnapshots (block-snapshot-1, 2, 3)"
-echo "  - $AFTER_INSERT2 rows of data in PostgreSQL"
-echo "  - Snapshot 1: $SNAP1_SIZE (baseline)"
-echo "  - Snapshot 2: $SNAP2_SIZE (+100 blocks)"
-echo "  - Snapshot 3: $SNAP3_SIZE (+200 blocks)"
+echo "  - Total data written: $TOTAL_BLOCKS blocks (${TOTAL_MB}MB)"
+echo "  - Snapshot 1: $SNAP1_SIZE (baseline: 100 blocks = 400KB)"
+echo "  - Snapshot 2: $SNAP2_SIZE (incremental: +200 blocks = 800KB)"
+echo "  - Snapshot 3: $SNAP3_SIZE (incremental: +300 blocks = 1.2MB)"
+echo ""
+echo "CBT Efficiency:"
+echo "  - Snapshot 1: Full backup required (baseline)"
+echo "  - Snapshot 2: Only changed blocks backed up (CBT delta from snapshot 1)"
+echo "  - Snapshot 3: Only changed blocks backed up (CBT delta from snapshot 2)"
 echo ""
 echo "Next steps:"
-echo "  1. Check backup status:  ./scripts/backup-status.sh"
-echo "  2. Verify integrity:     ./scripts/integrity-check.sh"
-echo "  3. Test restore:         ./scripts/restore-dry-run.sh cbt-demo block-snapshot-1"
-echo "  4. Simulate disaster:    ./scripts/05-simulate-disaster.sh"
+echo "  1. Test CBT backup tool: cd tools/cbt-backup && ./cbt-backup create --pvc $PVC_NAME --namespace $NAMESPACE"
+echo "  2. Verify snapshots:     kubectl get volumesnapshot -n $NAMESPACE"
+echo "  3. Simulate disaster:    ./scripts/05-simulate-disaster.sh"
+echo "  4. Test restore:         ./scripts/06-restore.sh"
 echo ""
-echo "NOTE: Full CBT block-level backup requires completing the gRPC client"
-echo "      implementation in tools/cbt-backup/pkg/metadata/cbt_client.go"
+echo "NOTE: This demo shows snapshot creation. Full CBT block-level backup to S3"
+echo "      requires completing the implementation in tools/cbt-backup/"
