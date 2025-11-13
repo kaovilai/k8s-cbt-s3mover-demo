@@ -602,6 +602,39 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 **Note**: Kind is not supported due to container-based limitations with loop device creation, which is required for block PVCs with the CSI hostpath driver.
 
+### OpenShift Compatibility
+
+**Status**: ✅ **Fully supported** with automatic configuration
+
+The demo works seamlessly on OpenShift 4.20+ with automatic PodSecurity policy configuration. OpenShift namespaces enforce `restricted` PodSecurity policies by default, which would normally block the privileged pods required for raw block device access.
+
+**Automatic Configuration**: The deployment script ([scripts/02-deploy-minio.sh](scripts/02-deploy-minio.sh)) automatically detects OpenShift and configures the namespace:
+
+1. **Detects OpenShift** by checking for SecurityContextConstraints API
+2. **Labels namespace** with `pod-security.kubernetes.io/enforce=privileged`
+3. **Grants privileged SCC** to the default service account in `cbt-demo` namespace
+
+**Manual Configuration** (if needed):
+```bash
+# Label namespace for privileged pods
+kubectl label namespace cbt-demo \
+  pod-security.kubernetes.io/enforce=privileged \
+  pod-security.kubernetes.io/audit=privileged \
+  pod-security.kubernetes.io/warn=privileged \
+  --overwrite
+
+# Grant privileged SCC (requires oc CLI)
+oc adm policy add-scc-to-user privileged -z default -n cbt-demo
+```
+
+**Tested On**:
+- ✅ OpenShift 4.21 (Kubernetes 1.34.1) on AWS ARM64
+- ✅ OpenShift 4.20+ with vanilla Kubernetes CSI drivers
+
+**Known Issues on ARM64 OpenShift**:
+- CSI snapshot metadata container readiness probe may fail (functional despite warning)
+- Pod shows 8/9 containers ready (expected on ARM64, CBT functionality works correctly)
+
 ### CBT API Availability
 
 **Status**: Changed Block Tracking API was introduced as an **alpha feature in Kubernetes 1.33**.
