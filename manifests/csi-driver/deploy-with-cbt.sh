@@ -136,26 +136,62 @@ done
 
 echo "✓ CSI driver pods created"
 
-echo "Waiting for CSI driver statefulset to be ready..."
-kubectl rollout status statefulset/csi-hostpathplugin -n "$NAMESPACE" --timeout=300s
+# Detect architecture
+ARCH=$(uname -m)
+echo "Detected architecture: $ARCH"
 
-echo "Waiting for CSI driver pods to be ready..."
-kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n "$NAMESPACE" --timeout=300s 2>/dev/null || {
-    echo "Warning: Pod readiness check failed, checking pod status..."
-    kubectl get pods -n "$NAMESPACE" | grep csi-hostpath || kubectl get pods -n "$NAMESPACE"
+# ARM64 readiness probe workaround
+# TODO: Remove this workaround once https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190 is merged
+# PR #190 adds multi-arch support for grpc_health_probe, fixing ARM64 readiness probe failures
+if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+    echo ""
+    echo "⚠ ARM64 detected: Skipping readiness probe checks"
+    echo "  The grpc_health_probe binary in upstream images is AMD64-only"
+    echo "  This causes readiness probe failures on ARM64, but the container remains functional"
+    echo "  See: https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190"
+    echo ""
 
-    # Check if pod is actually running despite wait failure
-    if kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
-        echo "✓ Pod is running"
-    else
-        echo "✗ Pod is not ready"
-        echo "Pod details:"
-        kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
-        exit 1
-    fi
-}
+    # Wait for pod to be Running (not Ready)
+    echo "Waiting for CSI driver pod to be Running..."
+    RETRIES=0
+    MAX_RETRIES=60
+    until kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; do
+        if [ $RETRIES -ge $MAX_RETRIES ]; then
+            echo "✗ CSI driver pod not running within timeout"
+            kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
+            exit 1
+        fi
+        echo "Waiting for pod to be Running... ($RETRIES/$MAX_RETRIES)"
+        sleep 3
+        RETRIES=$((RETRIES + 1))
+    done
 
-echo "✓ CSI driver pods are ready"
+    echo "✓ CSI driver pod is Running"
+    echo "  Note: Pod may show 8/9 containers ready due to readiness probe architecture mismatch"
+    echo "  This is expected and does not affect CBT functionality"
+else
+    # AMD64 or other architectures: Use standard readiness checks
+    echo "Waiting for CSI driver statefulset to be ready..."
+    kubectl rollout status statefulset/csi-hostpathplugin -n "$NAMESPACE" --timeout=300s
+
+    echo "Waiting for CSI driver pods to be ready..."
+    kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n "$NAMESPACE" --timeout=300s 2>/dev/null || {
+        echo "Warning: Pod readiness check failed, checking pod status..."
+        kubectl get pods -n "$NAMESPACE" | grep csi-hostpath || kubectl get pods -n "$NAMESPACE"
+
+        # Check if pod is actually running despite wait failure
+        if kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
+            echo "✓ Pod is running"
+        else
+            echo "✗ Pod is not ready"
+            echo "Pod details:"
+            kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
+            exit 1
+        fi
+    }
+
+    echo "✓ CSI driver pods are ready"
+fi
 
 echo ""
 echo "=========================================="

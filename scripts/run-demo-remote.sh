@@ -8,23 +8,18 @@ echo ""
 echo "This script will run the complete CBT demo on a remote Kubernetes cluster."
 echo ""
 echo "Prerequisites:"
-echo "  - KUBECONFIG environment variable pointing to your cluster"
+echo "  - kubectl configured to access your cluster"
 echo "  - Cluster with block volume support"
 echo "  - kubectl installed and configured"
 echo ""
 
-# Check if KUBECONFIG is set
-if [ -z "${KUBECONFIG:-}" ]; then
-    echo "Error: KUBECONFIG environment variable not set"
-    echo ""
-    echo "Set it with:"
-    echo "  export KUBECONFIG=/path/to/your/kubeconfig"
-    exit 1
-fi
-
 # Verify cluster connectivity
-if ! kubectl cluster-info &> /dev/null; then
-    echo "Error: Cannot connect to Kubernetes cluster"
+if ! kubectl cluster-info &>/dev/null; then
+    echo "Error: kubectl not configured or cluster not accessible"
+    echo ""
+    echo "Please configure kubectl to access your cluster:"
+    echo "  export KUBECONFIG=/path/to/your/kubeconfig"
+    echo "  or configure ~/.kube/config"
     exit 1
 fi
 

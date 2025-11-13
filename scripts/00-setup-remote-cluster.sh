@@ -5,19 +5,6 @@ echo "=========================================="
 echo "Setting up Remote Cluster for CBT demo"
 echo "=========================================="
 
-# Check if kubeconfig is provided
-if [ -z "${KUBECONFIG:-}" ]; then
-    echo "Error: KUBECONFIG environment variable not set"
-    echo ""
-    echo "Usage:"
-    echo "  export KUBECONFIG=/path/to/your/kubeconfig"
-    echo "  $0"
-    echo ""
-    echo "Or:"
-    echo "  KUBECONFIG=/path/to/your/kubeconfig $0"
-    exit 1
-fi
-
 # Check if kubectl is installed
 if ! command -v kubectl &> /dev/null; then
     echo "Error: kubectl is not installed"
@@ -27,9 +14,12 @@ fi
 
 # Verify cluster connectivity
 echo "Verifying cluster connectivity..."
-if ! kubectl cluster-info &> /dev/null; then
-    echo "Error: Cannot connect to Kubernetes cluster"
-    echo "Please check your KUBECONFIG and cluster accessibility"
+if ! kubectl cluster-info &>/dev/null; then
+    echo "Error: kubectl not configured or cluster not accessible"
+    echo ""
+    echo "Please configure kubectl to access your cluster:"
+    echo "  export KUBECONFIG=/path/to/your/kubeconfig"
+    echo "  or configure ~/.kube/config"
     exit 1
 fi
 
