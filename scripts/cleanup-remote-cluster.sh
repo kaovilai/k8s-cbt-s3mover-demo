@@ -5,6 +5,12 @@ echo "=========================================="
 echo "Cleaning up CBT demo from remote cluster"
 echo "=========================================="
 
+# Check for -y flag
+YES_FLAG=false
+if [ "${1:-}" = "-y" ] || [ "${1:-}" = "--yes" ]; then
+    YES_FLAG=true
+fi
+
 # Check if kubeconfig is set
 if [ -z "${KUBECONFIG:-}" ]; then
     echo "Warning: KUBECONFIG not set, using default kubectl context"
@@ -23,11 +29,15 @@ echo "  - Namespace: cbt-demo (and all resources within)"
 echo "  - VolumeSnapshots"
 echo "  - VolumeSnapshotContents"
 echo ""
-read -r -p "Continue with cleanup? (type 'yes' to proceed): " CONFIRM
 
-if [ "$CONFIRM" != "yes" ]; then
-    echo "Aborted."
-    exit 1
+if [ "$YES_FLAG" = false ]; then
+    read -r -p "Continue with cleanup? (type 'yes' to proceed): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Aborted."
+        exit 1
+    fi
+else
+    echo "Auto-confirmed with -y flag"
 fi
 
 # Delete namespace (this removes most resources)
