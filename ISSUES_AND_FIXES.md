@@ -437,6 +437,7 @@ kubectl apply -f manifests/workload/block-writer-pod.yaml -n cbt-demo
 4. ~~**Issue #5**: Deployment script hangs - Add timeout and fallback~~ ✅ **FIXED**
 
 ### Low Priority (Cosmetic/Documentation)
+
 5. ~~**Issue #6**: Validation script labels - Fix pod detection~~ ✅ **FIXED**
 6. **Issue #2**: ARM64 readiness probe - Document known issue
 7. **Issue #7**: Missing service - Investigate if required
