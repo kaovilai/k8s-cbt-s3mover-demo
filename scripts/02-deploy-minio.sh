@@ -9,6 +9,29 @@ echo "=========================================="
 echo "Creating namespace..."
 kubectl apply -f manifests/namespace.yaml
 
+# Check if running on OpenShift and configure privileged access
+if kubectl api-resources | grep -q "SecurityContextConstraints"; then
+    echo "Detected OpenShift - configuring privileged access for cbt-demo namespace..."
+
+    # Label namespace to allow privileged pods
+    kubectl label namespace cbt-demo \
+      pod-security.kubernetes.io/enforce=privileged \
+      pod-security.kubernetes.io/audit=privileged \
+      pod-security.kubernetes.io/warn=privileged \
+      --overwrite
+
+    # Grant privileged SCC to default service account (OpenShift-specific)
+    if command -v oc &> /dev/null; then
+        oc adm policy add-scc-to-user privileged -z default -n cbt-demo
+        echo "✓ Granted privileged SCC to default service account in cbt-demo namespace"
+    else
+        echo "⚠ WARNING: 'oc' command not found. Please manually run:"
+        echo "  oc adm policy add-scc-to-user privileged -z default -n cbt-demo"
+    fi
+
+    echo "✓ OpenShift namespace configured for privileged workloads"
+fi
+
 # Deploy MinIO using kustomize
 echo "Deploying MinIO..."
 kubectl apply -k manifests/minio/
