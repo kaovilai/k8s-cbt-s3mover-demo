@@ -4,6 +4,7 @@ set -euo pipefail
 echo "=========================================="
 echo "Deploying CSI Hostpath Driver with Changed Block Tracking"
 echo "Following upstream external-snapshot-metadata integration test pattern"
+echo "Using PR #621 branch (fixes duplicate sidecar injection)"
 echo "=========================================="
 
 # Get the script's directory to reference other files
@@ -12,7 +13,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Configuration
 CSI_DRIVER_DIR="/tmp/csi-driver-host-path"
-CSI_DRIVER_REPO="https://github.com/kubernetes-csi/csi-driver-host-path.git"
+# TEMPORARY: Using PR #621 branch until merged upstream
+# PR #621 fixes duplicate sidecar injection bug by copying files to TEMP_DIR before sed modifications
+# See: https://github.com/kubernetes-csi/csi-driver-host-path/pull/621
+CSI_DRIVER_REPO="https://github.com/kaovilai/csi-driver-host-path.git"
+CSI_DRIVER_BRANCH="fix-sed-in-place-modifications"
 NAMESPACE="default"
 
 echo ""
@@ -43,6 +48,34 @@ fi
 echo ""
 echo "Step 3: Clone CSI Hostpath Driver Repository"
 echo "-----------------------------------"
+
+# Verify existing clone is from correct repo/branch, or remove it
+if [ -d "$CSI_DRIVER_DIR" ]; then
+    echo "Found existing CSI driver repository at $CSI_DRIVER_DIR"
+
+    # Check if it's a git repository and from the correct remote
+    if [ -d "$CSI_DRIVER_DIR/.git" ]; then
+        CURRENT_REMOTE=$(cd "$CSI_DRIVER_DIR" && git config --get remote.origin.url 2>/dev/null || echo "")
+        CURRENT_BRANCH=$(cd "$CSI_DRIVER_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+        if [ "$CURRENT_REMOTE" = "$CSI_DRIVER_REPO" ] && [ "$CURRENT_BRANCH" = "$CSI_DRIVER_BRANCH" ]; then
+            echo "✓ Existing repository is from correct repo and branch"
+            echo "  Repository: $CURRENT_REMOTE"
+            echo "  Branch: $CURRENT_BRANCH"
+        else
+            echo "⚠ Existing repository is from different repo or branch:"
+            echo "  Current:  $CURRENT_REMOTE (branch: $CURRENT_BRANCH)"
+            echo "  Expected: $CSI_DRIVER_REPO (branch: $CSI_DRIVER_BRANCH)"
+            echo "  Removing and re-cloning..."
+            rm -rf "$CSI_DRIVER_DIR"
+        fi
+    else
+        echo "⚠ Directory exists but is not a git repository, removing..."
+        rm -rf "$CSI_DRIVER_DIR"
+    fi
+fi
+
+# Clone if directory doesn't exist (or was just removed)
 if [ ! -d "$CSI_DRIVER_DIR" ]; then
     echo "Cloning CSI hostpath driver repository..."
 
@@ -50,8 +83,8 @@ if [ ! -d "$CSI_DRIVER_DIR" ]; then
     CLONE_RETRIES=0
     MAX_CLONE_RETRIES=3
     until [ $CLONE_RETRIES -ge $MAX_CLONE_RETRIES ]; do
-        if git clone --depth 1 "$CSI_DRIVER_REPO" "$CSI_DRIVER_DIR"; then
-            echo "✓ Successfully cloned CSI driver repository"
+        if git clone --depth 1 --branch "$CSI_DRIVER_BRANCH" "$CSI_DRIVER_REPO" "$CSI_DRIVER_DIR"; then
+            echo "✓ Successfully cloned CSI driver repository (branch: $CSI_DRIVER_BRANCH)"
             break
         fi
         CLONE_RETRIES=$((CLONE_RETRIES + 1))
@@ -63,8 +96,6 @@ if [ ! -d "$CSI_DRIVER_DIR" ]; then
             exit 1
         fi
     done
-else
-    echo "✓ CSI driver repository already exists at $CSI_DRIVER_DIR"
 fi
 
 echo ""
