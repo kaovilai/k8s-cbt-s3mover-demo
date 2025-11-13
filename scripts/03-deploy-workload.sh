@@ -9,7 +9,27 @@ echo "This pod writes directly to the raw block device (no filesystem)"
 echo "This allows CBT to detect actual allocated blocks with data"
 echo ""
 
+# Check and update namespace security policy
+echo "Checking namespace security policy..."
+CURRENT_POLICY=$(kubectl get namespace cbt-demo -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null || echo "not-set")
+
+if [ "$CURRENT_POLICY" != "privileged" ]; then
+    echo "Namespace requires privileged security policy for raw block device access"
+    echo "Updating namespace security labels..."
+
+    kubectl label namespace cbt-demo \
+        pod-security.kubernetes.io/enforce=privileged \
+        pod-security.kubernetes.io/audit=privileged \
+        pod-security.kubernetes.io/warn=privileged \
+        --overwrite
+
+    echo "✓ Namespace security policy updated to privileged"
+else
+    echo "✓ Namespace security policy is already set to privileged"
+fi
+
 # Deploy block-writer Pod
+echo ""
 echo "Deploying block-writer with block PVC..."
 kubectl apply -f manifests/workload/block-writer-pod.yaml
 
