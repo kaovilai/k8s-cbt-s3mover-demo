@@ -63,12 +63,29 @@ This demo showcases:
 - ✅ Testing actual CBT metadata
 - ✅ Same setup as upstream CI tests
 
-**Requirements**: Docker, `minikube`, `kubectl`
+**Requirements**: `minikube`, `kubectl`, and a **VM-based driver**
 
 **Install prerequisites** (macOS):
 ```bash
 brew install minikube kubectl
+
+# For macOS: Choose a VM-based driver (block volume support required)
+# Option 1: vfkit (recommended - native Apple virtualization, requires macOS 13+)
+#   Automatically used by minikube 1.36+, no additional installation needed
+
+# Option 2: Docker Desktop (well-tested alternative)
+#   Download from: https://www.docker.com/products/docker-desktop/
+
+# Option 3: QEMU (open source alternative)
+brew install qemu
 ```
+
+**macOS Driver Compatibility** (Tested on macOS 26.1, Minikube 1.37.0):
+
+- ✅ **vfkit** - Native Apple virtualization (preferred for Minikube 1.36+)
+- ✅ **Docker Desktop** - VM-based, well-tested
+- ✅ **QEMU** - Open source VM solution
+- ❌ **Podman** - Does NOT support block volumes (minikube-hostpath limitation)
 
 **What the script does**:
 1. ✅ Check prerequisites

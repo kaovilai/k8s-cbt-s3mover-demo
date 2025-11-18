@@ -183,8 +183,26 @@ if minikube status --profile cbt-demo >/dev/null 2>&1; then
 fi
 
 if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
-    echo "Starting minikube with Docker driver..."
-    echo "  Driver: docker"
+    # Detect OS and choose appropriate driver
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS: Prefer vfkit (Minikube 1.36+), fall back to docker
+        MINIKUBE_VERSION=$(minikube version --short 2>&1 | grep -oE 'v[0-9]+\.[0-9]+' | sed 's/v//' | head -1)
+        MAJOR=$(echo "$MINIKUBE_VERSION" | cut -d. -f1)
+        MINOR=$(echo "$MINIKUBE_VERSION" | cut -d. -f2)
+
+        if [[ $MAJOR -gt 1 ]] || [[ $MAJOR -eq 1 && $MINOR -ge 36 ]]; then
+            DRIVER="vfkit"
+            echo "Starting minikube with vfkit driver (macOS native virtualization)..."
+        else
+            DRIVER="docker"
+            echo "Starting minikube with Docker driver (vfkit requires Minikube 1.36+)..."
+        fi
+    else
+        DRIVER="docker"
+        echo "Starting minikube with Docker driver..."
+    fi
+
+    echo "  Driver: $DRIVER"
     echo "  CPUs: 4"
     echo "  Memory: 8192MB"
     echo "  Kubernetes: v1.34.0 (CBT alpha support)"
@@ -192,7 +210,7 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
 
     minikube start \
         --profile cbt-demo \
-        --driver=docker \
+        --driver="$DRIVER" \
         --cpus=4 \
         --memory=8192 \
         --kubernetes-version=v1.34.0 \
@@ -215,25 +233,45 @@ kubectl get nodes
 
 # Detect if using Podman and warn about block device limitations
 echo ""
-if minikube profile list 2>/dev/null | grep -q "podman"; then
-    echo -e "${YELLOW}⚠️  WARNING: Podman Driver Detected${NC}"
-    echo -e "${YELLOW}─────────────────────────────────────${NC}"
+CURRENT_DRIVER=$(minikube profile list 2>/dev/null | grep "cbt-demo" | awk '{print $2}' || echo "unknown")
+if [[ "$CURRENT_DRIVER" == "podman" ]]; then
+    echo -e "${YELLOW}⚠️  WARNING: Podman Driver Detected - Block Volumes NOT Supported${NC}"
+    echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo "Minikube is using the Podman driver, which has limitations with block-mode volumes:"
-    echo "  • Loop device creation fails (needed for volumeMode: Block)"
-    echo "  • This affects CBT demonstrations which require block volumes"
+    echo -e "${RED}CONFIRMED LIMITATION (Tested on macOS 26.1, Minikube 1.37.0):${NC}"
+    echo "  ❌ Podman does NOT support block-mode volumes (volumeMode: Block)"
+    echo "  ❌ Error: 'k8s.io/minikube-hostpath does not support block volume provisioning'"
+    echo "  ❌ This demo requires block volumes for CBT functionality"
     echo ""
-    echo "Recommended alternatives for full block device support:"
-    echo "  1. Docker Desktop: Install and start Docker Desktop, then re-run with --driver=docker"
-    echo "  2. QEMU: Install qemu-system-aarch64, then re-run with --driver=qemu"
+    echo "Recommended alternatives with CONFIRMED block device support:"
+    echo "  1. vfkit (macOS 13+, Minikube 1.36+):"
+    echo "     minikube delete --profile cbt-demo"
+    echo "     minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
+    echo ""
+    echo "  2. Docker Desktop:"
+    echo "     Install from: https://www.docker.com/products/docker-desktop/"
+    echo "     minikube delete --profile cbt-demo"
+    echo "     minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
+    echo ""
+    echo "  3. QEMU:"
     echo "     brew install qemu"
-    echo "  3. Cloud Cluster: Use EKS/GKE/AKS for production-like testing"
-    echo "  4. CI/CD: The GitHub Actions workflow works correctly (see .github/workflows/demo.yaml)"
+    echo "     minikube delete --profile cbt-demo"
+    echo "     minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
     echo ""
-    echo -e "${YELLOW}Continuing with setup, but block-writer workload may fail...${NC}"
+    echo "  4. Cloud Cluster: Use EKS/GKE/AKS for production testing"
     echo ""
+    echo -e "${RED}This setup will FAIL during CSI driver deployment!${NC}"
+    echo ""
+
+    if [ "$NON_INTERACTIVE" = false ]; then
+        read -r -p "Continue anyway? (not recommended) [y/N]: " response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Exiting. Please use a VM-based driver (vfkit, docker, or qemu)"
+            exit 1
+        fi
+    fi
 else
-    echo -e "${BLUE}ℹ${NC} Minikube provides full block device support via VM"
+    echo -e "${GREEN}✓${NC} Driver '$CURRENT_DRIVER' provides full block device support"
 fi
 
 # Step 3: Install VolumeSnapshot CRDs
