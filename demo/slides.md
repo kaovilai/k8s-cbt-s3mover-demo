@@ -38,7 +38,133 @@ transition: fade-out
 layout: full
 ---
 
-# Overview
+---
+transition: slide-left
+---
+
+# The "Holy Grail" of Efficient Backups
+
+<div class="grid grid-cols-2 gap-4">
+<div>
+
+### The Problem
+If you have a **1TB disk** but only change **1MB of data**, you don't want to back up the whole 1TB again.
+
+### The Gap
+For a long time:
+- **Ceph** had the *ability* to track changes.
+- **Kubernetes** had no standard way to *ask* for them.
+
+The evolution of CBT is essentially the story of closing that communication gap.
+
+</div>
+<div>
+
+<div class="flex items-center justify-center h-full">
+<div class="text-center p-4 bg-gray-100 rounded-lg dark:bg-gray-800">
+  <div class="text-6xl mb-4">🏆</div>
+  <div class="text-xl font-bold">Tracking Changes</div>
+  <div class="text-sm opacity-75">Between Snapshots</div>
+</div>
+</div>
+
+</div>
+</div>
+
+---
+transition: slide-left
+---
+
+# 1. The "Native" Era (What Ceph always had)
+
+It is important to understand that Ceph's backend (**RBD**) has supported this for years.
+
+<v-clicks>
+
+- **The Tool**: `rbd diff`
+- **How it works**:
+  - Given `Snapshot-A` and `Snapshot-B`
+  - Ceph returns a list of exactly which blocks changed.
+- **The Problem**:
+  - Kubernetes didn't know this command existed.
+  - **CSI** was designed to *create* and *delete* volumes, not to inspect their data contents.
+
+</v-clicks>
+
+---
+transition: slide-left
+---
+
+# 2. The "Workaround" Era (Pre-Standardization)
+
+Before KEP-3314, backup tools (Velero, Kasten) had two bad choices:
+
+<div class="grid grid-cols-2 gap-8 mt-8">
+
+<v-click>
+<div class="p-4 border border-red-500 rounded bg-red-50 dark:bg-red-900/20">
+  <h3 class="text-red-600 dark:text-red-400 font-bold">The "Full Scan" Method</h3>
+  <p class="mt-2">Read the entire disk every time to find changes.</p>
+  <div class="mt-4 text-sm font-mono">Result: Slow & Expensive 🐢</div>
+</div>
+</v-click>
+
+<v-click>
+<div class="p-4 border border-orange-500 rounded bg-orange-50 dark:bg-orange-900/20">
+  <h3 class="text-orange-600 dark:text-orange-400 font-bold">The "Proprietary" Method</h3>
+  <p class="mt-2">Bypass K8s and talk directly to Ceph API.</p>
+  <div class="mt-4 text-sm font-mono">Result: Broken Portability 🔒</div>
+</div>
+</v-click>
+
+</div>
+
+---
+transition: slide-left
+---
+
+# 3. The "Modern" Era (KEP-3314)
+
+**KEP-3314: CSI Snapshot Metadata Service** changed the architecture.
+
+<div class="mt-4">
+
+| Component | Old Ceph CSI | New Ceph CSI (With CBT) |
+| :--- | :--- | :--- |
+| **Primary Job** | Mount/Unmount volumes | Mount/Unmount + **Serve Metadata** |
+| **New Sidecar** | None | **`external-snapshot-metadata`** |
+| **New RPC Call** | None | `GetMetadataDelta` (The magic command) |
+| **Data Flow** | K8s $\rightarrow$ Ceph | K8s $\rightarrow$ Sidecar $\rightarrow$ Ceph CSI $\rightarrow$ `rbd diff` |
+
+</div>
+
+<div class="mt-4 text-sm opacity-75">
+Instead of just being a "dumb" driver, Ceph CSI now exposes `rbd diff` data to Kubernetes in a standard way.
+</div>
+
+---
+transition: slide-left
+---
+
+# How it works today (The Workflow)
+
+When a backup tool (like Velero) runs with CBT enabled:
+
+<v-clicks>
+
+1.  **Ask**: Backup tool asks K8s for "Delta" between snapshots.
+2.  **Route**: Request goes to **CSI Snapshot Metadata Service**.
+3.  **Translate**: **Ceph CSI driver** translates to `rbd diff`.
+4.  **Respond**: Ceph responds with offset list of changed blocks.
+5.  **Transfer**: Backup tool downloads *only* those specific blocks.
+
+</v-clicks>
+
+<v-click>
+<div class="mt-8 p-3 bg-blue-100 dark:bg-blue-900/30 rounded text-center text-sm">
+  ℹ️ <b>Note:</b> Ceph is just one example. This is a standard, so more vendors will support it in the future.
+</div>
+</v-click>
 
 <v-click>
 
@@ -263,7 +389,7 @@ layout: default
 
 3. **Block Writer** workload
    - Writes directly to raw block device
-   - Block device PVC (/dev/xvdb)
+   - Block device PVC (/dev/xvda)
 
 4. **Snapshot Controller**
    - VolumeSnapshot CRDs
@@ -311,7 +437,7 @@ Demo components walkthrough:
 - RIGHT: Walk through the mermaid diagram
 - CSI Driver: Note it includes both hostpath plugin AND snapshot-metadata sidecar
 - MinIO: S3-compatible storage, easier than setting up real S3
-- Block Writer: Writes directly to raw block device /dev/xvdb, bypassing filesystem for CBT visibility
+- Block Writer: Writes directly to raw block device /dev/xvda, bypassing filesystem for CBT visibility
 - Snapshot Controller: Manages VolumeSnapshot lifecycle
 - Emphasize: Everything runs in a single namespace for simplicity
 -->
@@ -329,6 +455,7 @@ layout: default
 1. **Deploy Kubernetes Cluster**
    - Minikube (default) or remote cluster
    - 4 CPUs, 8GB RAM, containerd runtime
+   - **macOS**: Use `vfkit` driver (not Podman)
 
 2. **Install Snapshot CRDs**
    ```bash
@@ -352,6 +479,67 @@ Setup phase - emphasize automation:
 - CSI driver deployment includes TLS cert generation and sidecar injection
 - Scripts handle all complexity automatically
 - Point out: This is the foundation - once deployed, CBT just works
+-->
+
+---
+layout: default
+---
+
+# Critical Component: snapshot-metadata-lister
+
+<div class="text-sm">
+
+<v-clicks depth="2">
+
+## Why Is This Pod Needed?
+
+The **snapshot-metadata-lister** pod acts as an **authenticated client** to access CBT APIs:
+
+1. **Token Validation**
+   - Validates Kubernetes ServiceAccount tokens
+   - Uses TokenRequest API with audience-bound scoping
+
+2. **Name → Handle Translation**
+   - Translates VolumeSnapshot names to CSI snapshot handles
+   - Queries VolumeSnapshotContent resources
+
+3. **gRPC Proxy**
+   - Connects to SnapshotMetadataService over TLS (port 6443)
+   - Forwards API calls to CSI driver's metadata sidecar
+
+## RBAC Requirements
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: snapshot-metadata-lister
+  namespace: cbt-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: snapshot-metadata-lister
+  namespace: cbt-demo
+rules:
+- apiGroups: ["snapshot.storage.k8s.io"]
+  resources: ["volumesnapshots"]
+  verbs: ["get", "list"]
+```
+
+</v-clicks>
+
+</div>
+
+<!--
+Critical component explanation:
+- This pod bridges Kubernetes RBAC and CSI driver access
+- Without it, users cannot directly call CBT APIs
+- Token validation ensures only authorized users access metadata
+- Name translation allows using friendly snapshot names instead of handles
+- TLS-secured gRPC connection to SnapshotMetadataService
+- RBAC: Need get/list on VolumeSnapshots to translate names
+- This is deployed in Phase 3 before calling GetMetadataAllocated
 -->
 
 ---
@@ -386,7 +574,7 @@ Setup phase - emphasize automation:
 Workload deployment:
 - MinIO provides S3-compatible storage (easier than real S3 for demos)
 - Block-writer uses volumeMode: Block - emphasize this requirement
-- Initial data: 100 blocks written to raw device /dev/xvdb (~400KB)
+- Initial data: 100 blocks written to raw device /dev/xvda (~400KB)
 - Verification scripts ensure everything is working
 - This is the baseline for our CBT comparisons
 -->
@@ -465,6 +653,24 @@ Total: 100 blocks allocated (409,600 bytes = ~400KB)
 Volume: 2Gi (2,147,483,648 bytes)
 ```
 
+<v-click>
+
+<div class="mt-3 p-3 bg-green-900 bg-opacity-20 rounded">
+
+### 🎯 What This Demonstrates
+
+**Sparse Region Detection**:
+- Volume Size: 2 GB (full)
+- Allocated Blocks: ~400 KB (0.02%)
+- **Data Transferred**: ~400 KB only
+- **Savings**: ~2 GB (99.98%)
+
+Without CBT, backup tools would transfer the entire 2 GB volume. With CBT, only 400 KB of allocated blocks are identified and transferred.
+
+</div>
+
+</v-click>
+
 </div>
 
 <!--
@@ -475,6 +681,7 @@ Expected output explanation:
 - Only ~0.02% of 2Gi volume is allocated (demonstrates sparse region efficiency)
 - FIXED_LENGTH format with 4096-byte block granularity
 - This is what backup tools would receive from production CSI drivers
+- Educational box emphasizes the key benefit: skipping empty space
 -->
 
 ---
@@ -489,7 +696,7 @@ Expected output explanation:
 
 10. **Write Additional Data**
     ```bash
-    dd if=/dev/urandom of=/dev/xvdb bs=4096 count=100
+    dd if=/dev/urandom of=/dev/xvda bs=4096 count=100
     # Writes 100 more blocks (~400KB)
     ```
 
@@ -554,9 +761,34 @@ Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes
 Total: 100 changed blocks (409,600 bytes = ~400KB delta)
 Base Snapshot Handle: 7c0d6daa-1e9d-11ee-8f2a-0242ac110002
 Target Snapshot: block-snapshot-2
-
-Note: Base snapshot can be deleted after obtaining handle
 ```
+
+<v-click>
+
+<div class="mt-3 p-3 bg-blue-900 bg-opacity-20 rounded">
+
+### 🔄 PR #180: CSI Handle Support
+
+**Key Enhancement** (merged Oct 2025):
+- `GetMetadataDelta` now accepts **CSI snapshot handles** instead of names
+- Base snapshot **can be deleted** after extracting handle from VolumeSnapshotContent
+- **Storage savings**: No need to keep base snapshots forever
+- **Backward compatible**: Still supports snapshot names
+
+**Workflow**:
+```bash
+# Get CSI handle from VolumeSnapshotContent
+HANDLE=$(kubectl get volumesnapshotcontent $VSC \
+  -o jsonpath="{.status.snapshotHandle}")
+
+# Use handle for delta (base snapshot can be deleted)
+kubectl exec csi-client -- /tools/snapshot-metadata-lister \
+  -P "$HANDLE" -s block-snapshot-2
+```
+
+</div>
+
+</v-click>
 
 </div>
 
@@ -569,6 +801,60 @@ Expected output explanation:
 - With PR #180, base snapshot handle can be used even if snapshot deleted
 - This is the key CBT benefit - incremental backups transfer only changes
 - ByteOffset increments by 4096 for each sequential block
+- Educational box explains PR #180 feature and why it matters
+-->
+
+---
+layout: default
+---
+
+# Demo Workflow (cont.)
+
+<div class="text-sm">
+
+<v-clicks depth="2">
+
+## Phase 5: Disaster Recovery Testing
+
+13. **Simulate Disaster**
+    ```bash
+    ./scripts/05-simulate-disaster.sh
+    ```
+    - Saves device checksum before deletion
+    - Deletes block-writer pod and PVC
+    - Preserves VolumeSnapshots for recovery
+    - Stores checksum: `/tmp/cbt-demo-pre-disaster-checksum.txt`
+
+14. **Restore from Snapshot**
+    ```bash
+    ./scripts/06-restore.sh cbt-demo block-snapshot-2
+    ```
+    - Creates new PVC from selected snapshot
+    - Redeploys block-writer workload
+    - Mounts restored volume as `/dev/xvda`
+
+15. **Verify Recovery**
+    ```bash
+    ./scripts/07-verify.sh cbt-demo
+    ```
+    - Compares post-restore checksum with pre-disaster
+    - Verifies block device accessibility
+    - Confirms snapshot availability
+    - **Result**: ✓ Data integrity preserved
+
+</v-clicks>
+
+</div>
+
+<!--
+Phase 5 - Disaster Recovery workflow:
+- Demonstrates end-to-end disaster recovery using snapshots
+- Step 13: Simulate disaster by deleting workload but preserving snapshots
+- Step 14: Restore creates PVC from snapshot (native K8s restore, not CBT-based)
+- Step 15: Verify ensures data integrity with checksum comparison
+- This validates that snapshots are valid restore points
+- In production, CBT-based restore would use metadata to optimize recovery
+- Key point: Snapshots provide crash-consistent recovery points
 -->
 
 ---
@@ -1028,6 +1314,80 @@ Summary of achievements:
 - ✅ Automated CI/CD validation
 - Key takeaway: CBT reduces backup time and storage by tracking only changes
 - Mention: This is alpha in K8s 1.33+, production CSI driver support coming
+-->
+
+---
+layout: default
+---
+
+# Current Demo Limitations
+
+<div grid="~ cols-2 gap-8">
+<div>
+
+<v-click>
+
+## ✅ What Works
+
+**Infrastructure & Workflow**
+- CBT API calls execute successfully
+- End-to-end workflow validated
+- TLS-secured gRPC communication
+- K8s auth integration (TokenRequest, RBAC)
+- Production-ready infrastructure
+
+**PR #180 Features**
+- CSI handle support confirmed
+- Base snapshot deletion after handle extraction
+- Backward compatibility with snapshot names
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+## ⚠️ Current Limitations
+
+**CSI Driver Support**
+- hostpath driver: API works, no metadata returned
+- Production drivers (EBS, Azure Disk, Ceph): **No CBT support yet**
+- Waiting on vendor implementations
+
+**Backup Tool**
+- Metadata infrastructure: ✅ Complete
+- Block data upload to S3: ⏳ TODO
+- Restore tool: 📋 Planned
+
+**Timeline**
+- K8s 1.33: Alpha (current)
+- K8s 1.36: Proposed beta
+- Production driver support: Vendor-dependent
+
+</v-click>
+
+</div>
+</div>
+
+<v-click>
+
+<div class="mt-4 p-3 bg-blue-900 bg-opacity-30 rounded text-sm">
+
+💡 **Why This Demo Matters**: Even without full metadata, this validates the **workflow**, **API integration**, and **security model** that production CSI drivers will use when they add CBT support.
+
+</div>
+
+</v-click>
+
+<!--
+Limitations slide - set proper expectations:
+- LEFT: What actually works and is production-ready
+- RIGHT: What's still TODO or waiting on external dependencies
+- Bottom: Why this demo is still valuable despite limitations
+- Key message: Infrastructure and workflow are ready, waiting on CSI driver vendors
+- This prevents disappointment when users try the demo
+- Emphasizes that this is groundwork for future production use
 -->
 
 ---

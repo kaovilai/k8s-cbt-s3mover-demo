@@ -196,6 +196,8 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
         else
             DRIVER="docker"
             echo "Starting minikube with Docker driver (vfkit requires Minikube 1.36+)..."
+            echo -e "${YELLOW}⚠️  NOTE: If 'docker' is actually Podman (compatibility mode), this WILL FAIL.${NC}"
+            echo "   Podman does not support block volumes. Please upgrade Minikube to v1.36+ to use vfkit."
         fi
     else
         DRIVER="docker"
