@@ -1258,8 +1258,8 @@ layout: default
 
 ## PR #180 Support Confirmed ✅
 
-**Now using canary build with PR #180 merged** (Oct 15, 2025):
-- Image: `gcr.io/k8s-staging-sig-storage/csi-snapshot-metadata:canary`
+**Now using build with PR #180 merged** (Oct 15, 2025):
+- Image: `ghcr.io/kaovilai/csi-snapshot-metadata:multiarch-grpc-health-probe`
 - Image: `gcr.io/k8s-staging-sig-storage/hostpathplugin:canary`
 - **Key Feature**: GetMetadataDelta accepts CSI snapshot handles instead of names
 - **Benefit**: Base snapshot can be deleted after obtaining handle
