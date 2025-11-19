@@ -102,11 +102,12 @@ echo ""
 echo "Step 4: Install SnapshotMetadataService CRD"
 echo "-----------------------------------"
 echo "Installing SnapshotMetadataService CRD..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/v0.1.0/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
-    echo "Warning: Could not install SnapshotMetadataService CRD from v0.1.0"
-    echo "Trying alternative location..."
-
-    # Alternative: Try from the main branch
+echo "Installing SnapshotMetadataService CRD..."
+# Using CRD from multiarch-grpc-health-probe branch
+# TODO: Switch back to upstream once PR #190 is merged
+kubectl apply -f https://raw.githubusercontent.com/kaovilai/external-snapshot-metadata/multiarch-grpc-health-probe/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
+    echo "Warning: Could not install SnapshotMetadataService CRD from kaovilai fork"
+    echo "Trying upstream main branch..."
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/main/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
         echo "Warning: Could not install SnapshotMetadataService CRD"
         echo "CBT functionality may be limited"
@@ -135,12 +136,25 @@ echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  HOSTPATHPLUGIN_TAG=canary"
 echo ""
 
+# ARM64 Fix: Remove readiness probe from sidecar patch
+# The grpc_health_probe binary is AMD64-only in upstream images
+# See: https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190
+# NOTE: We are now using a custom image (ghcr.io/kaovilai/csi-snapshot-metadata:multiarch-grpc-health-probe)
+# which includes the fix, so we NO LONGER need to patch the manifest.
+# Keeping this block commented out for reference until upstream merge.
+# if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
+#    ...
+# fi
+
 # Deploy with environment variables
 # Note: Using canary tag for latest builds from main branch
 # See https://github.com/kubernetes-csi/csi-driver-host-path/blob/main/release-tools/README.md
-CSI_SNAPSHOT_METADATA_REGISTRY="gcr.io/k8s-staging-sig-storage" \
+# Deploy with environment variables
+# Note: Using multiarch-grpc-health-probe branch for ARM64 support
+# TODO: Switch back to upstream registry/tag once PR #190 is merged
+CSI_SNAPSHOT_METADATA_REGISTRY="ghcr.io/kaovilai" \
 UPDATE_RBAC_RULES="false" \
-CSI_SNAPSHOT_METADATA_TAG="canary" \
+CSI_SNAPSHOT_METADATA_TAG="multiarch-grpc-health-probe" \
 SNAPSHOT_METADATA_TESTS=true \
 HOSTPATHPLUGIN_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 HOSTPATHPLUGIN_TAG="canary" \
@@ -171,58 +185,27 @@ echo "✓ CSI driver pods created"
 ARCH=$(uname -m)
 echo "Detected architecture: $ARCH"
 
-# ARM64 readiness probe workaround
-# TODO: Remove this workaround once https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190 is merged
-# PR #190 adds multi-arch support for grpc_health_probe, fixing ARM64 readiness probe failures
-if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
-    echo ""
-    echo "⚠ ARM64 detected: Skipping readiness probe checks"
-    echo "  The grpc_health_probe binary in upstream images is AMD64-only"
-    echo "  This causes readiness probe failures on ARM64, but the container remains functional"
-    echo "  See: https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190"
-    echo ""
+# Wait for CSI driver pods to be ready
+echo "Waiting for CSI driver statefulset to be ready..."
+kubectl rollout status statefulset/csi-hostpathplugin -n "$NAMESPACE" --timeout=300s
 
-    # Wait for pod to be Running (not Ready)
-    echo "Waiting for CSI driver pod to be Running..."
-    RETRIES=0
-    MAX_RETRIES=60
-    until kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; do
-        if [ $RETRIES -ge $MAX_RETRIES ]; then
-            echo "✗ CSI driver pod not running within timeout"
-            kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
-            exit 1
-        fi
-        echo "Waiting for pod to be Running... ($RETRIES/$MAX_RETRIES)"
-        sleep 3
-        RETRIES=$((RETRIES + 1))
-    done
+echo "Waiting for CSI driver pods to be ready..."
+kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n "$NAMESPACE" --timeout=300s 2>/dev/null || {
+    echo "Warning: Pod readiness check failed, checking pod status..."
+    kubectl get pods -n "$NAMESPACE" | grep csi-hostpath || kubectl get pods -n "$NAMESPACE"
 
-    echo "✓ CSI driver pod is Running"
-    echo "  Note: Pod may show 8/9 containers ready due to readiness probe architecture mismatch"
-    echo "  This is expected and does not affect CBT functionality"
-else
-    # AMD64 or other architectures: Use standard readiness checks
-    echo "Waiting for CSI driver statefulset to be ready..."
-    kubectl rollout status statefulset/csi-hostpathplugin -n "$NAMESPACE" --timeout=300s
+    # Check if pod is actually running despite wait failure
+    if kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
+        echo "✓ Pod is running"
+    else
+        echo "✗ Pod is not ready"
+        echo "Pod details:"
+        kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
+        exit 1
+    fi
+}
 
-    echo "Waiting for CSI driver pods to be ready..."
-    kubectl wait --for=condition=Ready pod -l app=csi-hostpathplugin -n "$NAMESPACE" --timeout=300s 2>/dev/null || {
-        echo "Warning: Pod readiness check failed, checking pod status..."
-        kubectl get pods -n "$NAMESPACE" | grep csi-hostpath || kubectl get pods -n "$NAMESPACE"
-
-        # Check if pod is actually running despite wait failure
-        if kubectl get pod csi-hostpathplugin-0 -n "$NAMESPACE" -o jsonpath='{.status.phase}' 2>/dev/null | grep -q "Running"; then
-            echo "✓ Pod is running"
-        else
-            echo "✗ Pod is not ready"
-            echo "Pod details:"
-            kubectl describe pod csi-hostpathplugin-0 -n "$NAMESPACE"
-            exit 1
-        fi
-    }
-
-    echo "✓ CSI driver pods are ready"
-fi
+echo "✓ CSI driver pods are ready"
 
 echo ""
 echo "=========================================="

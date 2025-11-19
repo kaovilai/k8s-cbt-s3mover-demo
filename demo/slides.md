@@ -1355,6 +1355,11 @@ layout: default
 - Production drivers (EBS, Azure Disk, Ceph): **No CBT support yet**
 - Waiting on vendor implementations
 
+**ARM64 Architecture**
+- grpc_health_probe binary is AMD64-only in upstream
+- **Fix**: Using `multiarch-grpc-health-probe` branch
+- Pods should be Ready (9/9) and Service endpoints populated
+
 **Backup Tool**
 - Metadata infrastructure: ✅ Complete
 - Block data upload to S3: ⏳ TODO
