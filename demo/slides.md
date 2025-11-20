@@ -459,8 +459,7 @@ layout: default
 
 2. **Install Snapshot CRDs**
    ```bash
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/\
-   external-snapshotter/v8.2.0/client/config/crd/...
+   kubectl apply -k https://github.com/kubernetes-csi/external-snapshotter/client/config/crd?ref=release-8.2
    ```
 
 3. **Deploy CSI Driver with CBT**
