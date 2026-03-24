@@ -27,6 +27,7 @@ var (
 	blockSize         int64
 	kubeconfig        string
 	snapshotClass     string
+	cbtEndpoint       string
 )
 
 func main() {
@@ -58,6 +59,7 @@ Supports full and incremental backups with block data upload to S3.`,
 	backupCmd.Flags().Int64Var(&blockSize, "block-size", blocks.DefaultBlockSize, "Block size in bytes")
 	backupCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (uses in-cluster config if not provided)")
 	backupCmd.Flags().StringVar(&snapshotClass, "snapshot-class", "csi-hostpath-snapclass", "VolumeSnapshotClass name")
+	backupCmd.Flags().StringVar(&cbtEndpoint, "cbt-endpoint", "", "CBT gRPC endpoint (default: csi-snapshot-metadata.default:6443)")
 	backupCmd.MarkFlagRequired("pvc")
 
 	listCmd := &cobra.Command{
@@ -159,6 +161,10 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create CBT client: %w", err)
 	}
 	defer cbtClient.Close()
+
+	if cbtEndpoint != "" {
+		cbtClient.SetEndpoint(cbtEndpoint)
+	}
 
 	// Try to connect to CSI driver
 	fmt.Println("Connecting to CSI driver...")

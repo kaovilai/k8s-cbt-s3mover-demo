@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-backup/pkg/blocks"
@@ -55,16 +56,16 @@ func NewCBTClient(namespace string, kubeconfig string) (*CBTClient, error) {
 		namespace:  namespace,
 	}
 
-	// Note: In a production implementation, we would discover the
-	// SnapshotMetadataService endpoint from the Kubernetes API.
-	// However, the SnapshotMetadataService CRD is still in alpha
-	// and may not be available in all clusters.
-	//
-	// For this demo, we'll use a well-known socket path that matches
-	// the CSI hostpath driver deployment.
-	client.socketAddress = "unix:///csi/csi.sock"
+	// Default to in-cluster gRPC service endpoint for the SnapshotMetadata sidecar.
+	// This matches the Velero pattern of connecting to the service from a backup pod.
+	client.socketAddress = "csi-snapshot-metadata.default:6443"
 
 	return client, nil
+}
+
+// SetEndpoint overrides the default gRPC endpoint address
+func (c *CBTClient) SetEndpoint(endpoint string) {
+	c.socketAddress = endpoint
 }
 
 // Connect establishes the gRPC connection to the CSI driver
@@ -73,9 +74,13 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 		return nil // Already connected
 	}
 
+	// Use a timeout to avoid hanging forever if the endpoint is unreachable
+	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// Establish gRPC connection
 	conn, err := grpc.DialContext(
-		ctx,
+		connectCtx,
 		c.socketAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
