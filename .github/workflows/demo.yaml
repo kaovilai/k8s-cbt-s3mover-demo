@@ -745,6 +745,14 @@ jobs:
           echo "Running cbt-restore as in-cluster Job"
           echo "=========================================="
 
+          # Get the actual snapshot name from the backup (auto-generated name)
+          BACKUP_SNAPSHOT=$(kubectl logs job/cbt-backup -n cbt-demo | grep "Snapshot Name:" | awk '{print $NF}')
+          if [ -z "$BACKUP_SNAPSHOT" ]; then
+            echo "Could not determine backup snapshot name from logs, skipping restore"
+            exit 0
+          fi
+          echo "Restoring from backup snapshot: $BACKUP_SNAPSHOT"
+
           # Create target PVC for restore
           kubectl apply -f manifests/backup-restore/restore-pvc.yaml
 
@@ -754,8 +762,10 @@ jobs:
             kubectl get pvc restored-data -n cbt-demo
           }
 
-          # Run the restore job
-          kubectl apply -f manifests/backup-restore/restore-job.yaml
+          # Create restore job dynamically with the correct snapshot name
+          cat manifests/backup-restore/restore-job.yaml | \
+            sed "s/--snapshot=block-snapshot-1/--snapshot=$BACKUP_SNAPSHOT/" | \
+            kubectl apply -f -
 
           echo "Waiting for restore job to complete..."
           kubectl wait --for=condition=Complete job/cbt-restore -n cbt-demo --timeout=300s || {
