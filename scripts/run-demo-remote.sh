@@ -27,6 +27,9 @@ echo "Connected to: $(kubectl config current-context)"
 echo ""
 read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 # Step 1: Verify cluster
 echo ""
 echo "[Step 1/8] Verifying remote cluster..."
@@ -57,17 +60,12 @@ fi
 # Step 4: Deploy CSI Driver (optional - cluster might have its own)
 echo ""
 echo "[Step 4/8] Checking CSI Driver..."
-echo "  Note: Your cluster may already have a CSI driver with snapshot support."
-echo "  If so, you can skip installing the hostpath driver."
-echo ""
-read -r -p "Install CSI hostpath driver? (y/n): " INSTALL_CSI
-
-if [[ "$INSTALL_CSI" =~ ^[Yy]$ ]]; then
-    echo "  Installing CSI hostpath driver..."
+if [[ "$STORAGE_CLASS" == "csi-hostpath-sc" ]]; then
+    echo "  No supported cluster CSI driver detected. Installing CSI hostpath driver..."
     ./scripts/01-deploy-csi-driver.sh
 else
-    echo "  Skipping CSI driver installation"
-    echo "  Make sure your cluster has a CSI driver with VolumeSnapshot support!"
+    echo "  Using detected storage: $STORAGE_CLASS / $SNAPSHOT_CLASS"
+    echo "  Skipping CSI hostpath driver installation"
 fi
 
 # Step 5: Validate setup

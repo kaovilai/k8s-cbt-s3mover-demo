@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-block-snapshot-1}"
 PVC_NAME="${3:-}"
@@ -61,7 +64,7 @@ echo ""
     --s3-access-key "minioadmin" \
     --s3-secret-key "minioadmin123" \
     --s3-bucket "snapshots" \
-    --snapshot-class "csi-hostpath-snapclass" || {
+    --snapshot-class "$SNAPSHOT_CLASS" || {
     EXIT_CODE=$?
     echo ""
     echo "=========================================="

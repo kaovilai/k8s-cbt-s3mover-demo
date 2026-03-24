@@ -9,6 +9,9 @@ echo "This pod writes directly to the raw block device (no filesystem)"
 echo "This allows CBT to detect actual allocated blocks with data"
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 # Check and update namespace security policy
 echo "Checking namespace security policy..."
 CURRENT_POLICY=$(kubectl get namespace cbt-demo -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' 2>/dev/null || echo "not-set")
@@ -31,7 +34,8 @@ fi
 # Deploy block-writer Pod
 echo ""
 echo "Deploying block-writer with block PVC..."
-kubectl apply -f manifests/workload/block-writer-pod.yaml
+sed "s/storageClassName: .*/storageClassName: $STORAGE_CLASS/" \
+    manifests/workload/block-writer-pod.yaml | kubectl apply -f -
 
 # Wait for block-writer pod to be ready
 echo "Waiting for block-writer pod to be ready..."

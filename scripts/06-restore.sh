@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-block-snapshot-3}"  # Default to latest snapshot
 
@@ -51,7 +54,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   volumeMode: Block
-  storageClassName: csi-hostpath-sc
+  storageClassName: $STORAGE_CLASS
   dataSource:
     name: $SNAPSHOT_NAME
     kind: VolumeSnapshot

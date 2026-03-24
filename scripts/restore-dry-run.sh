@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-}"
 
@@ -54,7 +57,7 @@ spec:
   accessModes:
     - ReadWriteOnce
   volumeMode: Block
-  storageClassName: csi-hostpath-sc
+  storageClassName: $STORAGE_CLASS
   dataSource:
     name: $SNAPSHOT_NAME
     kind: VolumeSnapshot
@@ -121,7 +124,7 @@ echo "  namespace: $NAMESPACE"
 echo "spec:"
 echo "  accessModes: [ReadWriteOnce]"
 echo "  volumeMode: Block"
-echo "  storageClassName: csi-hostpath-sc"
+echo "  storageClassName: $STORAGE_CLASS"
 echo "  dataSource:"
 echo "    name: $SNAPSHOT_NAME"
 echo "    kind: VolumeSnapshot"

@@ -5,6 +5,9 @@ echo "=========================================="
 echo "Deploying MinIO"
 echo "=========================================="
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 # Create namespace
 echo "Creating namespace..."
 kubectl apply -f manifests/namespace.yaml
@@ -32,9 +35,9 @@ if kubectl api-resources | grep -q "SecurityContextConstraints"; then
     echo "✓ OpenShift namespace configured for privileged workloads"
 fi
 
-# Deploy MinIO using kustomize
+# Deploy MinIO using kustomize, substituting the storage class
 echo "Deploying MinIO..."
-kubectl apply -k manifests/minio/
+kubectl kustomize manifests/minio/ | sed "s/storageClassName: csi-hostpath-sc/storageClassName: $STORAGE_CLASS/" | kubectl apply -f -
 
 # Wait for MinIO pod to be created
 echo "Waiting for MinIO pod to be created..."

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 NAMESPACE="${1:-cbt-demo}"
 POD_NAME="block-writer"
 DEVICE="/dev/xvda"
@@ -173,7 +176,7 @@ echo "  metadata:"
 echo "    name: block-snapshot-new"
 echo "    namespace: $NAMESPACE"
 echo "  spec:"
-echo "    volumeSnapshotClassName: csi-hostpath-snapclass"
+echo "    volumeSnapshotClassName: $SNAPSHOT_CLASS"
 echo "    source:"
 echo "      persistentVolumeClaimName: $PVC_NAME"
 echo "  EOF"

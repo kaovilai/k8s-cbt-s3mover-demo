@@ -16,6 +16,9 @@ echo "7. Verify all snapshots"
 echo ""
 read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 NAMESPACE="cbt-demo"
 POD_NAME="block-writer"
 PVC_NAME="block-writer-data"
@@ -61,7 +64,7 @@ metadata:
   name: block-snapshot-1
   namespace: $NAMESPACE
 spec:
-  volumeSnapshotClassName: csi-hostpath-snapclass
+  volumeSnapshotClassName: $SNAPSHOT_CLASS
   source:
     persistentVolumeClaimName: $PVC_NAME
 EOF
@@ -158,7 +161,7 @@ metadata:
   name: block-snapshot-2
   namespace: $NAMESPACE
 spec:
-  volumeSnapshotClassName: csi-hostpath-snapclass
+  volumeSnapshotClassName: $SNAPSHOT_CLASS
   source:
     persistentVolumeClaimName: $PVC_NAME
 EOF
@@ -260,7 +263,7 @@ metadata:
   name: block-snapshot-3
   namespace: $NAMESPACE
 spec:
-  volumeSnapshotClassName: csi-hostpath-snapclass
+  volumeSnapshotClassName: $SNAPSHOT_CLASS
   source:
     persistentVolumeClaimName: $PVC_NAME
 EOF

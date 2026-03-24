@@ -5,6 +5,9 @@ echo "=========================================="
 echo "Validating Changed Block Tracking (CBT)"
 echo "=========================================="
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/detect-storage.sh"
+
 EXIT_CODE=0
 
 # Check if SnapshotMetadataService CRD exists
@@ -43,60 +46,74 @@ fi
 # Check CSI driver pods
 echo ""
 echo "Checking CSI driver pods..."
-if kubectl get pod -n default 2>/dev/null | grep -q "csi-hostpathplugin"; then
-    echo "✓ CSI hostpath driver pods found"
-    kubectl get pods -n default | grep csi-hostpath
+if [[ "$STORAGE_CLASS" == "ocs-storagecluster-ceph-rbd" ]]; then
+    if kubectl get pods -n openshift-storage -l app=csi-rbdplugin-provisioner --no-headers 2>/dev/null | grep -q Running; then
+        echo "✓ Ceph RBD CSI provisioner pods are running"
+        kubectl get pods -n openshift-storage -l app=csi-rbdplugin-provisioner --no-headers
+    else
+        echo "✗ Ceph RBD CSI provisioner pods not found or not running"
+        EXIT_CODE=1
+    fi
 else
-    echo "✗ CSI hostpath driver not found"
-    EXIT_CODE=1
+    if kubectl get pod -n default 2>/dev/null | grep -q "csi-hostpathplugin"; then
+        echo "✓ CSI hostpath driver pods found"
+        kubectl get pods -n default | grep csi-hostpath
+    else
+        echo "✗ CSI hostpath driver not found"
+        EXIT_CODE=1
+    fi
 fi
 
 # Check for snapshot metadata sidecar
 echo ""
 echo "Checking for snapshot metadata sidecar..."
-# Get all csi-hostpath pod names
-CSI_PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | awk '{print $1}')
-if [ -n "$CSI_PODS" ]; then
-    FOUND_SIDECAR=false
-    for POD in $CSI_PODS; do
-        if kubectl get pod "$POD" -n default -o yaml 2>/dev/null | grep -q "snapshot-metadata"; then
-            FOUND_SIDECAR=true
-            break
-        fi
-    done
+if [[ "$STORAGE_CLASS" == "ocs-storagecluster-ceph-rbd" ]]; then
+    echo "  Using Ceph RBD - snapshot metadata sidecar check not applicable"
+    echo "  CBT metadata support depends on the Ceph CSI driver version"
+else
+    # Get all csi-hostpath pod names
+    CSI_PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | awk '{print $1}')
+    if [ -n "$CSI_PODS" ]; then
+        FOUND_SIDECAR=false
+        for POD in $CSI_PODS; do
+            if kubectl get pod "$POD" -n default -o yaml 2>/dev/null | grep -q "snapshot-metadata"; then
+                FOUND_SIDECAR=true
+                break
+            fi
+        done
 
-    if [ "$FOUND_SIDECAR" = true ]; then
-        echo "✓ Snapshot metadata sidecar is present"
+        if [ "$FOUND_SIDECAR" = true ]; then
+            echo "✓ Snapshot metadata sidecar is present"
+        else
+            echo "✗ Snapshot metadata sidecar not found"
+            echo "  Ensure the driver was deployed with SNAPSHOT_METADATA_TESTS=true"
+            EXIT_CODE=1
+        fi
     else
-        echo "✗ Snapshot metadata sidecar not found"
-        echo "  Ensure the driver was deployed with SNAPSHOT_METADATA_TESTS=true"
+        echo "✗ Cannot check for snapshot metadata sidecar (CSI driver pods not found)"
         EXIT_CODE=1
     fi
-else
-    echo "✗ Cannot check for snapshot metadata sidecar (CSI driver pods not found)"
-    EXIT_CODE=1
 fi
 
 # Check VolumeSnapshotClass
 echo ""
 echo "Checking VolumeSnapshotClass..."
-if kubectl get volumesnapshotclass csi-hostpath-snapclass &> /dev/null; then
-    echo "✓ VolumeSnapshotClass 'csi-hostpath-snapclass' exists"
-    kubectl get volumesnapshotclass csi-hostpath-snapclass
+if kubectl get volumesnapshotclass "$SNAPSHOT_CLASS" &> /dev/null; then
+    echo "✓ VolumeSnapshotClass '$SNAPSHOT_CLASS' exists"
+    kubectl get volumesnapshotclass "$SNAPSHOT_CLASS"
 else
-    echo "✗ VolumeSnapshotClass 'csi-hostpath-snapclass' not found"
+    echo "✗ VolumeSnapshotClass '$SNAPSHOT_CLASS' not found"
     EXIT_CODE=1
 fi
 
 # Check StorageClass
 echo ""
 echo "Checking StorageClass..."
-if kubectl get storageclass csi-hostpath-sc &> /dev/null; then
-    echo "✓ StorageClass 'csi-hostpath-sc' exists"
-    kubectl get storageclass csi-hostpath-sc
+if kubectl get storageclass "$STORAGE_CLASS" &> /dev/null; then
+    echo "✓ StorageClass '$STORAGE_CLASS' exists"
+    kubectl get storageclass "$STORAGE_CLASS"
 else
-    echo "✗ StorageClass 'csi-hostpath-sc' not found"
-    echo "  This StorageClass is required for CBT functionality"
+    echo "✗ StorageClass '$STORAGE_CLASS' not found"
     echo "  Available StorageClasses:"
     kubectl get storageclass
     EXIT_CODE=1
