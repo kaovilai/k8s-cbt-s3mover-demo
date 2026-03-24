@@ -6,6 +6,7 @@ echo "Deploying MinIO"
 echo "=========================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
 # Create namespace

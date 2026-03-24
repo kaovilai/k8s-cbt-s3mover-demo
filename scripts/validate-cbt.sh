@@ -6,6 +6,7 @@ echo "Validating Changed Block Tracking (CBT)"
 echo "=========================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
 EXIT_CODE=0

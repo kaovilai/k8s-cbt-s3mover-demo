@@ -17,6 +17,7 @@ echo ""
 read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
 NAMESPACE="cbt-demo"
