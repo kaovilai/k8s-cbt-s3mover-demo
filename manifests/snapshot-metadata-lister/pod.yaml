@@ -7,7 +7,7 @@ spec:
   serviceAccountName: csi-client-sa
   initContainers:
   - name: install-client
-    image: golang:1.25
+    image: golang:1.26
     command:
     - /bin/sh
     - -c
