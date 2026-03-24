@@ -845,27 +845,20 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 **API Call in Workflow:**
 ```bash
-# Get CSI snapshot handle
-VSC=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo \
-  -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+# Get CSI snapshot handle, then call GetMetadataDelta
 HANDLE=$(kubectl get volumesnapshotcontent $VSC \
   -o jsonpath="{.status.snapshotHandle}")
-
-# Call GetMetadataDelta using CSI handle (PR #180)
 kubectl exec csi-client -- /tools/snapshot-metadata-lister \
   -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
 ```
 
-**Benefits**: Only transfer changed blocks (~400KB delta), base snapshot can be deleted after getting handle
-
 </v-clicks>
 
 <!--
-Use cases explained:
-- Full backup: Use GetMetadataAllocated to skip sparse regions, only backup allocated blocks
+- Benefits: Only transfer changed blocks (~400KB delta), base snapshot can be deleted after getting handle
+- Full backup: Use GetMetadataAllocated to skip sparse regions
 - Incremental backup: Use GetMetadataDelta to transfer only changed blocks
-- Both use cases are demonstrated in the workflow
-- PR #180 enhancement allows deleting base snapshots after getting handle - saves storage
+- PR #180 enhancement allows deleting base snapshots after getting handle
 - Key point: This is how production backup tools will integrate CBT
 -->
 ---
