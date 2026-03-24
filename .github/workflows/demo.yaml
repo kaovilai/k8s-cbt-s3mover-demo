@@ -38,9 +38,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version-file: tools/cbt-backup/go.mod
 
       - name: Download backup tool artifact
         uses: actions/download-artifact@v4
@@ -69,7 +69,7 @@ jobs:
           driver: docker
           cpus: 4
           memory: 8192
-          kubernetes-version: v1.30.0
+          kubernetes-version: v1.33.0
           container-runtime: containerd
           addons: storage-provisioner,default-storageclass
 
@@ -584,10 +584,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
-          cache-dependency-path: tools/cbt-backup/go.sum
+          go-version-file: tools/cbt-backup/go.mod
 
       - name: Download dependencies
         working-directory: tools/cbt-backup
@@ -639,9 +638,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version-file: tools/cbt-backup/go.mod
 
       - name: Check restore tool status
         run: |
@@ -674,10 +673,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
-          cache-dependency-path: tools/cbt-backup/go.sum
+          go-version-file: tools/cbt-backup/go.mod
 
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@master
