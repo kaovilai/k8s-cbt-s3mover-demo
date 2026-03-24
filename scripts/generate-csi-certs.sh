@@ -91,9 +91,9 @@ MANIFEST_FILE="$(dirname "$0")/../manifests/csi-driver/testdata/snapshotmetadata
 if [ -f "$MANIFEST_FILE" ]; then
     echo "Updating $MANIFEST_FILE with generated CA certificate..."
 
-    # Use sed to replace the placeholder with actual base64-encoded CA cert
+    # Replace any existing caCert value (placeholder or previous cert) with the newly generated one
     # Note: GNU sed (required on macOS) uses -i without backup suffix
-    sed -i "s|caCert: PLACEHOLDER_CA_CERT|caCert: $CA_CERT_BASE64|g" "$MANIFEST_FILE"
+    sed -i "s|caCert: .*|caCert: $CA_CERT_BASE64|g" "$MANIFEST_FILE"
 
     echo "✓ SnapshotMetadataService manifest updated"
 else
