@@ -120,7 +120,7 @@ For the actual demo implementation, see:
 - **Scripts**: `../scripts/` directory
 - **Tools**: `../tools/cbt-backup/`
 - **Workflow**: `../.github/workflows/demo.yaml`
-- **Documentation**: `../README.md`, `../STATUS.md`
+- **Documentation**: `../README.md`
 
 ## Customization
 

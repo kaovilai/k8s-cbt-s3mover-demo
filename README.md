@@ -12,7 +12,7 @@ This demo showcases:
 - ✅ **Disaster recovery** - restore from incremental snapshots
 - ✅ **Local testing** with Minikube or cloud clusters
 
-## 📋 Prerequisites
+## Prerequisites
 
 - [Minikube](https://minikube.sigs.k8s.io/) or a cloud Kubernetes cluster
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.28.0 or later
@@ -20,6 +20,14 @@ This demo showcases:
 - ~10GB free disk space
 
 **CBT Support**: Changed Block Tracking API is available as an alpha feature starting in **Kubernetes 1.33**. For full CBT functionality, use Kubernetes 1.33 or later.
+
+```bash
+# Verify prerequisites
+minikube version         # v1.36.0 or later recommended
+kubectl version --client # v1.28.0 or later
+go version               # 1.22 or later (optional, for building tools)
+df -h /tmp               # Need ~10GB free
+```
 
 ## 🏗️ Architecture
 
@@ -184,13 +192,41 @@ This creates:
 - Block-writer pod with 1Gi block PVC for raw device access
 - Writes data directly to raw block device (no filesystem layer)
 
-## 🧪 Demo Workflow
+## Demo Workflow
 
-### Complete Demo (Coming Soon)
+### Validate Setup
 
 ```bash
-# Run the complete demo workflow
+./scripts/validate-cbt.sh      # Validates CBT configuration
+./scripts/backup-status.sh     # Shows backup status and S3 usage
+./scripts/integrity-check.sh   # Verifies data and backup integrity
+```
+
+### Run Complete Demo
+
+```bash
 ./scripts/04-run-demo.sh
+```
+
+### Inspect Block Device
+
+```bash
+# Connect to block-writer pod
+kubectl exec -it -n cbt-demo block-writer -- sh
+
+# Inside the pod:
+blockdev --getsize64 /dev/xvda
+dd if=/dev/xvda bs=4K count=1 skip=1 2>/dev/null | od -An -tx1 | head -5
+exit
+```
+
+### Monitor Resources
+
+```bash
+kubectl get pods -n cbt-demo --watch
+kubectl get all -n cbt-demo
+kubectl get pvc,pv -n cbt-demo
+kubectl get volumesnapshot,volumesnapshotcontent -n cbt-demo
 ```
 
 ### Manual Steps
@@ -259,7 +295,7 @@ This creates:
 
 7. **Restore from backups**
    ```bash
-   # ⚠️ Restore tool not yet implemented - see STATUS.md
+   # Restore tool not yet implemented
    # Planned usage:
    # ./tools/cbt-restore/cbt-restore restore --pvc block-writer-data \
    #   --snapshots block-snapshot-1,block-snapshot-2
@@ -331,7 +367,7 @@ snapshot retention policies.
 - Reconstruct volume by applying blocks in order
 - Verify data integrity with checksums
 
-**Note**: This tool is not yet implemented. See `/workspace/STATUS.md` for current progress.
+**Note**: This tool is not yet implemented.
 
 ## 📊 Verifying CBT is Working
 
@@ -353,7 +389,6 @@ kubectl logs -n default -l app=csi-hostpathplugin -c hostpath | grep -i metadata
 ```
 k8s-cbt-s3mover-demo/
 ├── README.md                      # This file
-├── PLAN.md                        # Detailed implementation plan
 ├── manifests/
 │   ├── namespace.yaml
 │   ├── minio/                     # MinIO S3 storage
@@ -764,7 +799,7 @@ kubectl run -it --rm debug --image=minio/mc --restart=Never -- \
   minioadmin minioadmin123
 ```
 
-## 🧹 Cleanup
+## Cleanup
 
 ### Minikube Cluster
 
@@ -784,6 +819,17 @@ This removes:
 - `cbt-demo` namespace and all resources
 - VolumeSnapshots and VolumeSnapshotContents
 - Does NOT remove: CSI driver, CRDs, or storage classes (manual cleanup if needed)
+
+### Reset Demo
+
+To start fresh without deleting the cluster:
+```bash
+./scripts/cleanup.sh
+./scripts/00-setup-cluster.sh
+./scripts/01-deploy-csi-driver.sh
+./scripts/02-deploy-minio.sh
+./scripts/03-deploy-workload.sh
+```
 
 ## 📚 References
 

@@ -348,14 +348,13 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 1. **Backup tool changes**: Work in `tools/cbt-backup/`, update `pkg/` packages
 2. **New scripts**: Follow numbering convention, add to README.md
 3. **Manifest changes**: Update in `manifests/` directory, test with validation scripts
-4. **Documentation**: Update README.md, STATUS.md, and this file
+4. **Documentation**: Update README.md and this file
 
 ### Testing Changes
 
 1. Run `./scripts/cleanup.sh` to ensure clean state
 2. Run `./scripts/run-local-minikube.sh` for full integration test
 3. Verify with `./scripts/validate-cbt.sh` and `./scripts/integrity-check.sh`
-4. Check STATUS.md and update completion percentages
 
 ### Working with the Backup Tool
 
@@ -432,9 +431,8 @@ git add tools/cbt-backup/pkg/metadata/cbt_client.go
 
 ## Project Status Summary
 
-See STATUS.md for detailed tracking, but key points:
 - Infrastructure: 100% complete
-- Backup tool: 90% complete (metadata infrastructure done, block upload TODO)
-- Restore tool: 0% complete (planned)
-- All automation scripts: 100% complete
-- Documentation: 100% complete
+- Automation scripts: 100% complete
+- CI/CD: 100% complete
+- Backup tool (`tools/cbt-backup/`): 90% complete — CBT gRPC APIs (GetMetadataAllocated, GetMetadataDelta) and S3 metadata operations work; block data upload to S3 is TODO
+- Restore tool (`tools/cbt-restore/`): not yet implemented

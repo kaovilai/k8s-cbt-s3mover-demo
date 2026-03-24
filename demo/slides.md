@@ -1033,7 +1033,7 @@ go build -v -o cbt-backup ./cmd
 - Placeholder implementation
 - Future enhancement
 
-See `STATUS.md` and `IMPLEMENTATION_COMPLETE.md` for details.
+See `README.md` for details.
 
 </v-click>
 
@@ -1425,7 +1425,7 @@ kubectl apply -f manifests/snapshot-2.yaml
 
 ## Demo Resources
 
-- 📖 **Demo Docs**: `README.md`, `STATUS.md`
+- 📖 **Demo Docs**: `README.md`
 - 🔧 **Scripts**: `scripts/` directory
 - 🛠️ **Tools**: `tools/cbt-backup/`
 - 🚀 **Workflow**: `.github/workflows/demo.yaml`
@@ -1438,7 +1438,7 @@ Call to action:
 - It's fully automated with scripts - just run them in order
 - Works on Minikube or any K8s cluster
 - All code is open source and documented
-- Point to README.md and STATUS.md for details
+- Point to README.md for details
 - Mention: Great way to learn CBT before production CSI drivers support it
 -->
 
