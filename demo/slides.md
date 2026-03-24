@@ -797,7 +797,7 @@ go build -v -o cbt-backup ./cmd
 **Status:**
 - `06-restore.sh`: Functional (used in Phase 5)
 - `restore-dry-run.sh`: Validation only
-- CBT-optimized restore tool: Planned
+- `cbt-restore`: Built, needs block upload in backup
 
 </v-click>
 
@@ -1095,7 +1095,7 @@ layout: default
 **Backup Tool**
 - Metadata infrastructure: Complete
 - Block data upload to S3: TODO
-- Restore tool: Planned
+- Restore tool: Implemented (awaits block upload)
 
 </v-click>
 
