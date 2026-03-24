@@ -778,11 +778,16 @@ go build -v -o cbt-backup ./cmd
 
 <v-click>
 
-## Restore Tool
+## Restore Scripts
 
 ```bash
+# Dry-run (validate only)
 ./scripts/restore-dry-run.sh \
   cbt-demo block-snapshot-1
+
+# Full restore from snapshot
+./scripts/06-restore.sh \
+  cbt-demo block-snapshot-2
 ```
 
 </v-click>
@@ -790,11 +795,9 @@ go build -v -o cbt-backup ./cmd
 <v-click>
 
 **Status:**
-- Currently in development
-- Placeholder implementation
-- Future enhancement
-
-See `README.md` for details.
+- `06-restore.sh`: Functional (used in Phase 5)
+- `restore-dry-run.sh`: Validation only
+- CBT-optimized restore tool: Planned
 
 </v-click>
 
