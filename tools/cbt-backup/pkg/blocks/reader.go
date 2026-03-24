@@ -117,6 +117,67 @@ func (r *Reader) GetDeviceSize() (int64, error) {
 	return size, nil
 }
 
+// ScanNonZeroBlocks scans a device and returns metadata for blocks that contain
+// non-zero data. This is a fallback when CBT is not available — it performs a
+// full device scan to find allocated blocks, similar to what a backup tool would
+// do without change tracking.
+func ScanNonZeroBlocks(devicePath string, blockSize int64) ([]BlockMetadata, error) {
+	if blockSize <= 0 {
+		blockSize = DefaultBlockSize
+	}
+
+	f, err := os.OpenFile(devicePath, os.O_RDONLY, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open device %s: %w", devicePath, err)
+	}
+	defer f.Close()
+
+	// Get device size
+	size, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get device size: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek to start: %w", err)
+	}
+
+	var result []BlockMetadata
+	buf := make([]byte, blockSize)
+
+	for offset := int64(0); offset < size; offset += blockSize {
+		readSize := blockSize
+		if offset+readSize > size {
+			readSize = size - offset
+		}
+
+		n, err := io.ReadFull(f, buf[:readSize])
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return nil, fmt.Errorf("failed to read at offset %d: %w", offset, err)
+		}
+		if n == 0 {
+			break
+		}
+
+		// Check if block has any non-zero bytes
+		nonZero := false
+		for _, b := range buf[:n] {
+			if b != 0 {
+				nonZero = true
+				break
+			}
+		}
+
+		if nonZero {
+			result = append(result, BlockMetadata{
+				Offset: offset,
+				Size:   int64(n),
+			})
+		}
+	}
+
+	return result, nil
+}
+
 // BlockMetadata describes a block's location
 type BlockMetadata struct {
 	Offset int64 `json:"offset"`

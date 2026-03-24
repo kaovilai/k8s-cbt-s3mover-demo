@@ -174,11 +174,23 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	var cbtEnabled bool
 
 	if connectErr != nil {
-		// CBT not available - fall back to metadata-only backup
+		// CBT not available - fall back to full device scan
 		fmt.Printf("⚠ CBT not available: %v\n", connectErr)
-		fmt.Println("  Continuing with metadata-only backup (no actual blocks will be uploaded)")
-		blockList = metadata.BlockList{Blocks: []blocks.BlockMetadata{}}
 		cbtEnabled = false
+
+		if devicePath != "" {
+			// Scan device for non-zero blocks (fallback when CBT is unavailable)
+			fmt.Println("  Falling back to full device scan for non-zero blocks...")
+			allocatedBlocks, scanErr := blocks.ScanNonZeroBlocks(devicePath, blockSize)
+			if scanErr != nil {
+				return fmt.Errorf("failed to scan device: %w", scanErr)
+			}
+			blockList = metadata.BlockList{Blocks: allocatedBlocks}
+			fmt.Printf("✓ Found %d non-zero blocks via device scan\n", len(allocatedBlocks))
+		} else {
+			fmt.Println("  No device path specified - metadata-only backup")
+			blockList = metadata.BlockList{Blocks: []blocks.BlockMetadata{}}
+		}
 	} else {
 		cbtEnabled = true
 
