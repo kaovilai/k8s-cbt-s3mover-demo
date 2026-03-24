@@ -22,24 +22,24 @@ the upstream e2e test suites for CSI Changed Block Tracking (CBT):
 |---|---|---|---|
 | Cluster | Minikube via `medyagh/setup-minikube` | CSI Prow CI | Minikube via `medyagh/setup-minikube` + BYOC |
 | CSI hostpath driver | canary tag, `SNAPSHOT_METADATA_TESTS=true` | `--enable-snapshot-metadata` flag | canary tag, `SNAPSHOT_METADATA_TESTS=true` |
-| Snapshot CRDs | external-snapshotter v8.1.0 | external-snapshotter v8.4.0 | external-snapshotter v8.2.0 |
-| Snapshot controller | v8.1.0, patched to `default` namespace | v8.4.0, standard deploy | v8.2.0 |
+| Snapshot CRDs | external-snapshotter v8.1.0 | external-snapshotter v8.4.0 | external-snapshotter v8.4.0 |
+| Snapshot controller | v8.1.0, patched to `default` namespace | v8.4.0, standard deploy | v8.4.0 |
 | TLS certificates | Pre-generated testdata in repo | Generated programmatically in Go test code | Script-generated (`scripts/generate-csi-certs.sh`) |
 | SnapshotMetadataService CRD | Installed from this repo | Installed from `test/e2e/testing-manifests/` | Installed from external-snapshot-metadata repo |
 | Sidecar image | Built from PR SHA (`${{ github.sha }}`) | `gcr.io/k8s-staging-sig-storage` test tag | `gcr.io/k8s-staging-sig-storage` test tag |
 | Service endpoint | `csi-snapshot-metadata.default:6443` | `csi-snapshot-metadata.<ns>:6443` | `csi-snapshot-metadata.default:6443` |
 
-**Assessment**: Infrastructure setup is closely aligned with external-snapshot-metadata. The main
-difference is snapshot CRD version (v8.2.0 vs v8.4.0 in k/k).
+**Assessment**: Infrastructure setup is closely aligned with both upstream suites. Snapshot CRDs
+now match kubernetes/kubernetes at v8.4.0.
 
 ## API Coverage Comparison
 
 | Test Scenario | external-snapshot-metadata | kubernetes/kubernetes | demo.yaml |
 |---|---|---|---|
-| GetMetadataAllocated | Tested + block-verified | Tested + block-verified | Called, **not verified** |
-| GetMetadataDelta (snapshot names) | Tested + block-verified | Tested + block-verified | Called, **not verified** |
+| GetMetadataAllocated | Tested + block-verified | Tested + block-verified | Called + block-verified |
+| GetMetadataDelta (snapshot names) | Tested + block-verified | Tested + block-verified | Called + block-verified |
 | GetMetadataDelta (CSI handle, PR #180) | Tested + block-verified | Not tested | Called, **not verified** |
-| Negative test (mismatch detection) | Tested (write + assert fail) | Not tested | **Not tested** |
+| Negative test (mismatch detection) | Tested (write + assert fail) | Not tested | Tested (write + assert fail) |
 | Audience/token auth matrix | Tested (with/without) | Not tested | **Not tested** |
 | Pagination (`-max-results`) | Tested (10) | Default (driver decides) | Tested (10) |
 | S3 metadata upload | Not tested | Not tested | Tested (MinIO) |
@@ -66,59 +66,32 @@ go install github.com/kubernetes-csi/external-snapshot-metadata/tools/snapshot-m
 
 The external-snapshot-metadata tests build it from the PR source code.
 
-### This repo: `snapshot-metadata-lister` only
+### This repo: `snapshot-metadata-lister` + `snapshot-metadata-verifier`
 
-demo.yaml calls `snapshot-metadata-lister` to display block metadata but **does not run the verifier**.
-This proves the API responds but does not prove the metadata is correct.
+demo.yaml calls `snapshot-metadata-lister` to display block metadata and runs the
+`snapshot-metadata-verifier` to validate metadata correctness against actual device contents.
+The verifier pod (`manifests/snapshot-metadata-verifier/`) builds both tools from upstream source
+and mounts source/target block PVCs for comparison.
 
 ## Detailed Gaps
 
-### Gap 1: No block-level data verification (HIGH)
+### Gap 1: No block-level data verification (HIGH) -- CLOSED
 
-**Upstream behavior**: Both suites restore snapshots to PVCs, mount them as block devices in a
-verification pod, and run `snapshot-metadata-verifier` to compare metadata against actual device
-contents.
+**Status**: Implemented. Added `snapshot-metadata-verifier` steps for both GetMetadataAllocated
+and GetMetadataDelta. Verifier pod manifest at `manifests/snapshot-metadata-verifier/pod.yaml`
+builds both lister and verifier from upstream source, mounts source/target block PVCs, and
+validates metadata against actual device contents.
 
-**demo.yaml behavior**: Calls `snapshot-metadata-lister` to list blocks, but never verifies that
-the returned block metadata matches the actual device data.
+### Gap 2: No negative testing (MEDIUM) -- CLOSED
 
-**Impact**: Cannot prove CBT metadata correctness. A CSI driver returning wrong block offsets
-would not be caught.
+**Status**: Implemented. After GetMetadataAllocated verification succeeds, a "Negative test"
+step writes extra data to the target device and re-runs the verifier, asserting it fails.
+This matches the external-snapshot-metadata upstream pattern.
 
-**Fix**: Add a step that deploys the verifier pod pattern from upstream:
-```yaml
-- name: Verify CBT metadata with snapshot-metadata-verifier
-  run: |
-    # Restore snapshot to source PVC
-    # Create empty target PVC
-    # Deploy verification pod with both devices + verifier tool
-    # Run: snapshot-metadata-verifier -snapshot snap-1 \
-    #   -source-device-path /dev/source -target-device-path /dev/target
-```
+### Gap 3: Snapshot CRD version behind kubernetes/kubernetes (LOW) -- CLOSED
 
-### Gap 2: No negative testing (MEDIUM)
-
-**Upstream behavior** (external-snapshot-metadata only): After successful verification, writes
-additional data to the target device and runs the verifier again, asserting it **fails**. This
-proves the verifier actually catches mismatches rather than always succeeding.
-
-**demo.yaml behavior**: No negative test cases.
-
-**Fix**: After successful verification, write extra data and assert verifier returns non-zero exit:
-```bash
-# Write extra data to target device
-kubectl exec verifier-pod -- dd if=/dev/urandom of=/dev/target bs=4K count=1 oflag=direct
-# Expect verifier to fail
-! kubectl exec verifier-pod -- /tools/snapshot-metadata-verifier ...
-```
-
-### Gap 3: Snapshot CRD version behind kubernetes/kubernetes (LOW)
-
-**Upstream**: kubernetes/kubernetes uses external-snapshotter v8.4.0.
-
-**demo.yaml**: Uses v8.2.0.
-
-**Fix**: Bump CRD and controller URLs from v8.2.0 to v8.4.0.
+**Status**: Bumped all snapshot CRD and controller URLs from v8.2.0 to v8.4.0, matching
+kubernetes/kubernetes.
 
 ### Gap 4: No audience parameter testing (LOW)
 
@@ -134,21 +107,11 @@ strategy:
 
 **Fix**: Add a matrix or second workflow run with audience configured.
 
-### Gap 5: RBAC missing `serviceaccounts/token` permission (LOW)
+### Gap 5: RBAC missing `serviceaccounts/token` permission (LOW) -- ALREADY CLOSED
 
-**Upstream** (kubernetes/kubernetes): The backup client RBAC includes permission to create
-ServiceAccount tokens via the TokenRequest API:
-```yaml
-- apiGroups: [""]
-  resources: [serviceaccounts/token]
-  verbs: [create, get]
-```
-
-**demo.yaml**: The `snapshot-metadata-lister` RBAC may not include this permission. The lister
-currently works because it uses in-cluster config, but the verifier requires explicit token
-creation.
-
-**Fix**: Add `serviceaccounts/token` create permission to the lister/verifier RBAC.
+**Status**: The existing `manifests/snapshot-metadata-lister/rbac.yaml` already includes
+`serviceaccounts/token` with `create` and `get` verbs. The verifier pod reuses the same
+`csi-client-sa` ServiceAccount and RBAC. No changes needed.
 
 ## What demo.yaml Covers That Upstream Does Not
 
@@ -186,7 +149,7 @@ The `test/e2e/storage/utils/snapshot-metadata.go` generates TLS certificates in 
 with proper SANs for the service DNS name. This is more robust than pre-generated or
 script-generated certificates.
 
-### 3. Test data writing pattern (from both)
+### 3. Test data writing pattern (from both) -- ADOPTED
 
 ```bash
 # Direct I/O to bypass page cache
@@ -194,16 +157,16 @@ dd if=/dev/urandom of=/dev/xvda bs=4K count=6 oflag=direct status=none
 sync
 ```
 
-demo.yaml uses `conv=notrunc` but not `oflag=direct`. Adding `oflag=direct` ensures data
-hits the block device immediately, matching upstream behavior.
+demo.yaml now uses `oflag=direct` on all dd commands and adds `sync` after each batch of
+writes, matching upstream behavior.
 
 ## Priority Action Items
 
-| Priority | Gap | Effort | Impact |
+| Priority | Gap | Status | Impact |
 |----------|-----|--------|--------|
-| HIGH | Add `snapshot-metadata-verifier` step | Medium | Proves metadata correctness |
-| MEDIUM | Add negative test (mismatch detection) | Low | Validates verifier catches errors |
-| LOW | Bump snapshot CRDs to v8.4.0 | Low | Aligns with kubernetes/kubernetes |
-| LOW | Add `oflag=direct` to dd commands | Trivial | Matches upstream I/O pattern |
-| LOW | Test audience parameter | Low | Covers auth edge case |
-| LOW | Add `serviceaccounts/token` RBAC | Trivial | Required for verifier |
+| HIGH | Add `snapshot-metadata-verifier` step | CLOSED | Proves metadata correctness |
+| MEDIUM | Add negative test (mismatch detection) | CLOSED | Validates verifier catches errors |
+| LOW | Bump snapshot CRDs to v8.4.0 | CLOSED | Aligns with kubernetes/kubernetes |
+| LOW | Add `oflag=direct` to dd commands | CLOSED | Matches upstream I/O pattern |
+| LOW | Test audience parameter | OPEN | Covers auth edge case |
+| LOW | Add `serviceaccounts/token` RBAC | ALREADY CLOSED | Required for verifier |

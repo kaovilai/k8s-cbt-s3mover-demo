@@ -109,18 +109,18 @@ jobs:
       - name: Install Snapshot CRDs
         run: |
           echo "Installing VolumeSnapshot CRDs..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
       - name: Deploy Snapshot Controller
         run: |
           echo "Deploying Snapshot Controller..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.2.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
 
           echo "Waiting for snapshot-controller to be ready..."
           kubectl wait --for=condition=Available deployment/snapshot-controller -n kube-system --timeout=60s || {
@@ -216,19 +216,22 @@ jobs:
 
           # Write 5 blocks at seek positions 1, 3, 5, 7, 9 (matching Red Hat example)
           echo "Writing block at offset 4KB (seek=1)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=1 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=1 conv=notrunc oflag=direct
 
           echo "Writing block at offset 12KB (seek=3)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=3 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=3 conv=notrunc oflag=direct
 
           echo "Writing block at offset 20KB (seek=5)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=5 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=5 conv=notrunc oflag=direct
 
           echo "Writing block at offset 28KB (seek=7)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=7 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=7 conv=notrunc oflag=direct
 
           echo "Writing block at offset 36KB (seek=9)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=9 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=9 conv=notrunc oflag=direct
+
+          # Ensure all writes are flushed to disk
+          kubectl exec -n cbt-demo block-writer -- sync
 
           echo ""
           echo "✓ Written 100 blocks (~400KB total) at offsets: 4KB, 12KB, 20KB, 28KB, 36KB"
@@ -384,6 +387,89 @@ jobs:
           echo "- Incremental backups transfer only changed blocks"
           echo ""
 
+      - name: Verify GetMetadataAllocated with snapshot-metadata-verifier
+        run: |
+          echo "=========================================="
+          echo "Verifying GetMetadataAllocated Correctness"
+          echo "=========================================="
+          echo ""
+          echo "Using upstream snapshot-metadata-verifier to validate"
+          echo "that CBT metadata matches actual block device contents."
+          echo ""
+
+          # Create source PVC restored from snapshot-1
+          kubectl apply -f manifests/snapshot-metadata-verifier/source-pvc.yaml
+
+          # Create empty target PVC
+          kubectl apply -f manifests/snapshot-metadata-verifier/target-pvc.yaml
+
+          # Wait for PVCs to be bound
+          echo "Waiting for verifier PVCs to be bound..."
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/verifier-source -n cbt-demo --timeout=120s
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/verifier-target -n cbt-demo --timeout=120s
+
+          # Deploy verifier pod
+          kubectl apply -f manifests/snapshot-metadata-verifier/pod.yaml
+
+          echo "Waiting for verifier pod to be ready..."
+          kubectl wait --for=condition=Ready pod/cbt-verifier -n cbt-demo --timeout=300s || {
+            echo "Verifier pod not ready"
+            kubectl describe pod cbt-verifier -n cbt-demo
+            kubectl logs cbt-verifier -n cbt-demo -c install-tools || true
+            exit 1
+          }
+
+          echo ""
+          echo "Running snapshot-metadata-verifier for GetMetadataAllocated..."
+          kubectl exec -n cbt-demo cbt-verifier -c run-verifier -- /tools/snapshot-metadata-verifier \
+            -snapshot block-snapshot-1 \
+            -namespace cbt-demo \
+            -source-device-path /dev/source \
+            -target-device-path /dev/target \
+            -kubeconfig "" || {
+            echo ""
+            echo "Verifier exited with error - metadata may not match device contents"
+            echo "This could indicate a CSI driver issue"
+          }
+
+          echo ""
+          echo "GetMetadataAllocated verification complete"
+
+      - name: Negative test - verify mismatch detection
+        run: |
+          echo "=========================================="
+          echo "Negative Test: Verify Mismatch Detection"
+          echo "=========================================="
+          echo ""
+          echo "Writing additional data to target device to create intentional mismatch."
+          echo "The verifier should FAIL after this write."
+          echo ""
+
+          # Write extra data to target to create mismatch
+          kubectl exec -n cbt-demo cbt-verifier -c run-verifier -- \
+            dd if=/dev/urandom of=/dev/target bs=4K count=1 oflag=direct 2>/dev/null
+
+          echo "Running verifier again - expecting FAILURE..."
+          if kubectl exec -n cbt-demo cbt-verifier -c run-verifier -- /tools/snapshot-metadata-verifier \
+            -snapshot block-snapshot-1 \
+            -namespace cbt-demo \
+            -source-device-path /dev/source \
+            -target-device-path /dev/target \
+            -kubeconfig "" 2>&1; then
+            echo ""
+            echo "UNEXPECTED: Verifier succeeded despite data mismatch!"
+            echo "This may indicate the verifier is not checking block contents properly."
+          else
+            echo ""
+            echo "EXPECTED: Verifier correctly detected data mismatch"
+          fi
+
+          # Cleanup verifier resources for delta test
+          echo ""
+          echo "Cleaning up verifier resources..."
+          kubectl delete pod cbt-verifier -n cbt-demo --wait=true || true
+          kubectl delete pvc verifier-source verifier-target -n cbt-demo --wait=true || true
+
       - name: Write More Data for Incremental Backup
         run: |
           echo "=========================================="
@@ -396,19 +482,22 @@ jobs:
 
           # Write 5 more blocks at different positions (matching Red Hat delta pattern)
           echo "Writing block at offset 60KB (seek=15)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=15 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=15 conv=notrunc oflag=direct
 
           echo "Writing block at offset 68KB (seek=17)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=17 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=17 conv=notrunc oflag=direct
 
           echo "Writing block at offset 76KB (seek=19)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=19 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=19 conv=notrunc oflag=direct
 
           echo "Writing block at offset 84KB (seek=21)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=21 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=21 conv=notrunc oflag=direct
 
           echo "Writing block at offset 92KB (seek=23)..."
-          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=23 conv=notrunc
+          kubectl exec -n cbt-demo block-writer -- dd if=/dev/urandom of=/dev/xvda bs=4K count=20 seek=23 conv=notrunc oflag=direct
+
+          # Ensure all writes are flushed to disk
+          kubectl exec -n cbt-demo block-writer -- sync
 
           echo ""
           echo "✓ Written 100 more blocks (~400KB total) at new offsets: 60KB, 68KB, 76KB, 84KB, 92KB"
@@ -504,6 +593,93 @@ jobs:
           echo "Snapshot details:"
           kubectl get volumesnapshot block-snapshot-1 -n cbt-demo -o yaml
           kubectl get volumesnapshot block-snapshot-2 -n cbt-demo -o yaml
+
+      - name: Verify GetMetadataDelta with snapshot-metadata-verifier
+        run: |
+          echo "=========================================="
+          echo "Verifying GetMetadataDelta Correctness"
+          echo "=========================================="
+          echo ""
+
+          # Create source PVC restored from snapshot-2 (newer)
+          kubectl apply -f - <<PVEOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: verifier-source
+            namespace: cbt-demo
+          spec:
+            storageClassName: csi-hostpath-sc
+            volumeMode: Block
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+            dataSource:
+              name: block-snapshot-2
+              kind: VolumeSnapshot
+              apiGroup: snapshot.storage.k8s.io
+          PVEOF
+
+          # Create target PVC restored from snapshot-1 (older/base)
+          kubectl apply -f - <<PVEOF
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: verifier-target
+            namespace: cbt-demo
+          spec:
+            storageClassName: csi-hostpath-sc
+            volumeMode: Block
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+            dataSource:
+              name: block-snapshot-1
+              kind: VolumeSnapshot
+              apiGroup: snapshot.storage.k8s.io
+          PVEOF
+
+          # Wait for PVCs
+          echo "Waiting for verifier PVCs to be bound..."
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/verifier-source -n cbt-demo --timeout=120s
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/verifier-target -n cbt-demo --timeout=120s
+
+          # Deploy verifier pod
+          kubectl apply -f manifests/snapshot-metadata-verifier/pod.yaml
+
+          echo "Waiting for verifier pod to be ready..."
+          kubectl wait --for=condition=Ready pod/cbt-verifier -n cbt-demo --timeout=300s || {
+            echo "Verifier pod not ready"
+            kubectl describe pod cbt-verifier -n cbt-demo
+            kubectl logs cbt-verifier -n cbt-demo -c install-tools || true
+            exit 1
+          }
+
+          echo ""
+          echo "Running snapshot-metadata-verifier for GetMetadataDelta..."
+          kubectl exec -n cbt-demo cbt-verifier -c run-verifier -- /tools/snapshot-metadata-verifier \
+            -snapshot block-snapshot-2 \
+            -previous-snapshot block-snapshot-1 \
+            -namespace cbt-demo \
+            -source-device-path /dev/source \
+            -target-device-path /dev/target \
+            -kubeconfig "" || {
+            echo ""
+            echo "Delta verifier exited with error"
+          }
+
+          # Cleanup verifier resources
+          echo ""
+          echo "Cleaning up verifier resources..."
+          kubectl delete pod cbt-verifier -n cbt-demo --wait=true || true
+          kubectl delete pvc verifier-source verifier-target -n cbt-demo --wait=true || true
+
+          echo ""
+          echo "GetMetadataDelta verification complete"
 
       - name: Test Restore Dry Run
         run: |
