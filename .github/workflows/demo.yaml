@@ -640,31 +640,24 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: tools/cbt-backup/go.mod
+          go-version-file: tools/cbt-restore/go.mod
 
-      - name: Check restore tool status
+      - name: Build restore tool
         run: |
-          echo "Restore tool directory structure:"
-          ls -la tools/cbt-restore/ || echo "Restore tool directory not yet populated"
-
-          echo ""
-          echo "Restore tool status: Not yet implemented"
-          echo "The restore tool implementation is tracked as a future enhancement."
-          echo "See STATUS.md and IMPLEMENTATION_COMPLETE.md for details."
-
-          # Create placeholder structure to prevent workflow failure
-          mkdir -p tools/cbt-restore/cmd
-          echo 'package main; func main() { println("Restore tool placeholder") }' > tools/cbt-restore/cmd/main.go
-          echo 'module github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-restore' > tools/cbt-restore/go.mod
-          echo 'go 1.22' >> tools/cbt-restore/go.mod
-
-          # Test the placeholder builds
           cd tools/cbt-restore
+          go mod download
           go build -v -o cbt-restore ./cmd
-          ./cbt-restore
-
           echo ""
-          echo "✓ Placeholder build successful"
+          echo "✓ Restore tool built successfully"
+
+      - name: Test restore tool
+        run: |
+          cd tools/cbt-restore
+          go test -v ./...
+
+      - name: Verify restore tool CLI
+        run: |
+          ./tools/cbt-restore/cbt-restore --help
 
   lint:
     runs-on: ubuntu-latest

@@ -146,7 +146,12 @@ cd tools/cbt-backup
 
 **TODO:** Block data upload is not yet implemented (currently metadata-only). The infrastructure is complete; need to add actual block reading and S3 upload in `runBackup()`.
 
-**tools/cbt-restore/** - Restore tool (planned, not yet started)
+**tools/cbt-restore/** - CBT-optimized restore tool
+- `cmd/main.go`: CLI entry point with Cobra commands (restore, plan, list)
+- `pkg/blocks/blocks.go`: Block writer with checksum verification
+- `pkg/metadata/types.go`: Shared metadata structures (SnapshotManifest, BlockList, SnapshotChain, RestoreStats)
+- `pkg/s3/client.go`: MinIO client for downloading metadata and block data
+- Resolves snapshot chains (base → incremental) and applies blocks in order
 
 ### Scripts Organization
 
@@ -435,4 +440,4 @@ git add tools/cbt-backup/pkg/metadata/cbt_client.go
 - Automation scripts: 100% complete
 - CI/CD: 100% complete
 - Backup tool (`tools/cbt-backup/`): 90% complete — CBT gRPC APIs (GetMetadataAllocated, GetMetadataDelta) and S3 metadata operations work; block data upload to S3 is TODO
-- Restore tool (`tools/cbt-restore/`): not yet implemented
+- Restore tool (`tools/cbt-restore/`): implemented — resolves snapshot chains, downloads blocks from S3, writes to device
