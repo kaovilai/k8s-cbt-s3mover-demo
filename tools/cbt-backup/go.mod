@@ -1,8 +1,6 @@
 module github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-backup
 
-go 1.23.0
-
-toolchain go1.24.5
+go 1.25.0
 
 require (
 	github.com/container-storage-interface/spec v1.11.0
