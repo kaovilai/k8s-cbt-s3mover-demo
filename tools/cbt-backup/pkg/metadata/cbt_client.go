@@ -2,6 +2,9 @@ package metadata
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"time"
@@ -11,19 +14,42 @@ import (
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	snapclientset "github.com/kubernetes-csi/external-snapshotter/client/v8/clientset/versioned"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
+	authv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// bearerToken implements grpc credentials.PerRPCCredentials for bearer token auth
+type bearerToken struct {
+	token string
+}
+
+func (t bearerToken) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+	return map[string]string{
+		"authorization": "Bearer " + t.token,
+	}, nil
+}
+
+func (t bearerToken) RequireTransportSecurity() bool {
+	return true
+}
+
 // CBTClient interfaces with the CSI SnapshotMetadata service
 type CBTClient struct {
-	conn          *grpc.ClientConn
-	client        csi.SnapshotMetadataClient
-	snapClient    *snapclientset.Clientset
-	namespace     string
-	socketAddress string
+	conn               *grpc.ClientConn
+	client             csi.SnapshotMetadataClient
+	snapClient         *snapclientset.Clientset
+	kubeClient         *kubernetes.Clientset
+	dynClient          dynamic.Interface
+	config             *rest.Config
+	namespace          string
+	serviceAccountName string
+	socketAddress      string // override endpoint (skips discovery)
 }
 
 // NewCBTClient creates a new CBT client
@@ -31,7 +57,7 @@ type CBTClient struct {
 // 1. Creates a Kubernetes client for snapshot API
 // 2. Discovers the SnapshotMetadataService endpoint
 // 3. Establishes gRPC connection to the CSI driver
-func NewCBTClient(namespace string, kubeconfig string) (*CBTClient, error) {
+func NewCBTClient(namespace string, kubeconfig string, serviceAccountName string) (*CBTClient, error) {
 	// Create Kubernetes config
 	var config *rest.Config
 	var err error
@@ -51,21 +77,97 @@ func NewCBTClient(namespace string, kubeconfig string) (*CBTClient, error) {
 		return nil, fmt.Errorf("failed to create snapshot client: %w", err)
 	}
 
-	client := &CBTClient{
-		snapClient: snapClient,
-		namespace:  namespace,
+	// Create core Kubernetes client (for SA token creation)
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// Default to in-cluster gRPC service endpoint for the SnapshotMetadata sidecar.
-	// This matches the Velero pattern of connecting to the service from a backup pod.
-	client.socketAddress = "csi-snapshot-metadata.default:6443"
+	// Create dynamic client (for SnapshotMetadataService CR)
+	dynClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
+	if serviceAccountName == "" {
+		serviceAccountName = "cbt-backup-sa"
+	}
+
+	client := &CBTClient{
+		snapClient:         snapClient,
+		kubeClient:         kubeClient,
+		dynClient:          dynClient,
+		config:             config,
+		namespace:          namespace,
+		serviceAccountName: serviceAccountName,
+	}
 
 	return client, nil
 }
 
-// SetEndpoint overrides the default gRPC endpoint address
+// SetEndpoint overrides the default gRPC endpoint address (skips service discovery)
 func (c *CBTClient) SetEndpoint(endpoint string) {
 	c.socketAddress = endpoint
+}
+
+// discoverService reads the SnapshotMetadataService CR to find the gRPC endpoint,
+// CA certificate, and audience for token-based authentication.
+func (c *CBTClient) discoverService(ctx context.Context) (address, caCertBase64, audience string, err error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "cbt.storage.k8s.io",
+		Version:  "v1alpha1",
+		Resource: "snapshotmetadataservices",
+	}
+
+	list, err := c.dynClient.Resource(gvr).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to list SnapshotMetadataService resources: %w", err)
+	}
+
+	if len(list.Items) == 0 {
+		return "", "", "", fmt.Errorf("no SnapshotMetadataService resources found")
+	}
+
+	// Use the first available service (typically there's only one)
+	item := list.Items[0]
+	spec, ok := item.Object["spec"].(map[string]interface{})
+	if !ok {
+		return "", "", "", fmt.Errorf("invalid SnapshotMetadataService spec")
+	}
+
+	address, _ = spec["address"].(string)
+	caCertBase64, _ = spec["caCert"].(string)
+	audience, _ = spec["audience"].(string)
+
+	if address == "" {
+		return "", "", "", fmt.Errorf("SnapshotMetadataService has no address")
+	}
+
+	fmt.Printf("Discovered SnapshotMetadataService: address=%s, audience=%s\n", address, audience)
+	return address, caCertBase64, audience, nil
+}
+
+// createSAToken creates a service account token with the specified audience
+func (c *CBTClient) createSAToken(ctx context.Context, audience string) (string, error) {
+	audiences := []string{}
+	if audience != "" {
+		audiences = []string{audience}
+	}
+
+	tokenReq := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences: audiences,
+		},
+	}
+
+	token, err := c.kubeClient.CoreV1().ServiceAccounts(c.namespace).CreateToken(
+		ctx, c.serviceAccountName, tokenReq, metav1.CreateOptions{},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create SA token for %s/%s: %w", c.namespace, c.serviceAccountName, err)
+	}
+
+	return token.Status.Token, nil
 }
 
 // Connect establishes the gRPC connection to the CSI driver
@@ -78,21 +180,79 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	var address string
+	var dialOpts []grpc.DialOption
+
+	if c.socketAddress != "" {
+		// Manual endpoint override — use insecure (for testing/debugging)
+		address = c.socketAddress
+		fmt.Printf("Using manually configured endpoint: %s\n", address)
+		dialOpts = append(dialOpts,
+			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
+		)
+	} else {
+		// Discover service from SnapshotMetadataService CR
+		svcAddress, caCertB64, audience, err := c.discoverService(connectCtx)
+		if err != nil {
+			return fmt.Errorf("failed to discover snapshot metadata service: %w", err)
+		}
+		address = svcAddress
+
+		// Build TLS credentials from CA cert
+		tlsConfig, err := buildTLSConfig(caCertB64)
+		if err != nil {
+			return fmt.Errorf("failed to build TLS config: %w", err)
+		}
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+
+		// Create SA token for authentication
+		token, err := c.createSAToken(connectCtx, audience)
+		if err != nil {
+			return fmt.Errorf("failed to create authentication token: %w", err)
+		}
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(bearerToken{token: token}))
+		fmt.Println("Created SA token for gRPC authentication")
+	}
+
+	dialOpts = append(dialOpts, grpc.WithBlock())
+
 	// Establish gRPC connection
+	fmt.Printf("Connecting to CSI SnapshotMetadata service at %s...\n", address)
 	conn, err := grpc.DialContext(
 		connectCtx,
-		c.socketAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		address,
+		dialOpts...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to connect to CSI driver at %s: %w", c.socketAddress, err)
+		return fmt.Errorf("failed to connect to CSI driver at %s: %w", address, err)
 	}
 
 	c.conn = conn
 	c.client = csi.NewSnapshotMetadataClient(conn)
+	fmt.Println("Connected to CSI SnapshotMetadata service")
 
 	return nil
+}
+
+// buildTLSConfig creates a TLS config from a base64-encoded CA certificate
+func buildTLSConfig(caCertBase64 string) (*tls.Config, error) {
+	if caCertBase64 == "" {
+		return &tls.Config{InsecureSkipVerify: true}, nil
+	}
+
+	caCertPEM, err := base64.StdEncoding.DecodeString(caCertBase64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode CA cert: %w", err)
+	}
+
+	certPool := x509.NewCertPool()
+	if !certPool.AppendCertsFromPEM(caCertPEM) {
+		return nil, fmt.Errorf("failed to parse CA certificate")
+	}
+
+	return &tls.Config{
+		RootCAs: certPool,
+	}, nil
 }
 
 // GetAllocatedBlocks returns all allocated blocks in a snapshot

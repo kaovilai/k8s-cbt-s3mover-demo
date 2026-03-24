@@ -26,8 +26,9 @@ var (
 	devicePath        string
 	blockSize         int64
 	kubeconfig        string
-	snapshotClass     string
-	cbtEndpoint       string
+	snapshotClass      string
+	cbtEndpoint        string
+	serviceAccountName string
 )
 
 func main() {
@@ -59,7 +60,8 @@ Supports full and incremental backups with block data upload to S3.`,
 	backupCmd.Flags().Int64Var(&blockSize, "block-size", blocks.DefaultBlockSize, "Block size in bytes")
 	backupCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (uses in-cluster config if not provided)")
 	backupCmd.Flags().StringVar(&snapshotClass, "snapshot-class", "csi-hostpath-snapclass", "VolumeSnapshotClass name")
-	backupCmd.Flags().StringVar(&cbtEndpoint, "cbt-endpoint", "", "CBT gRPC endpoint (default: csi-snapshot-metadata.default:6443)")
+	backupCmd.Flags().StringVar(&cbtEndpoint, "cbt-endpoint", "", "CBT gRPC endpoint (overrides service discovery)")
+	backupCmd.Flags().StringVar(&serviceAccountName, "service-account", "cbt-backup-sa", "Service account name for CBT token auth")
 	backupCmd.MarkFlagRequired("pvc")
 
 	listCmd := &cobra.Command{
@@ -156,7 +158,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 
 	// Initialize CBT client
 	fmt.Println("\n[5/8] Analyzing blocks to backup using CBT...")
-	cbtClient, err := metadata.NewCBTClient(namespace, kubeconfig)
+	cbtClient, err := metadata.NewCBTClient(namespace, kubeconfig, serviceAccountName)
 	if err != nil {
 		return fmt.Errorf("failed to create CBT client: %w", err)
 	}

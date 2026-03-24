@@ -23,6 +23,7 @@ spec:
         - --s3-access-key=minioadmin
         - --s3-secret-key=minioadmin123
         - --s3-bucket=snapshots
+        - --service-account=cbt-backup-sa
         volumeDevices:
         - name: data-volume
           devicePath: /dev/xvda
