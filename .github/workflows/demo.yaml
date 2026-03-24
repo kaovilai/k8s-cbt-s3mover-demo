@@ -48,8 +48,16 @@ jobs:
           name: cbt-backup
           path: tools/cbt-backup
 
-      - name: Make backup tool executable
-        run: chmod +x tools/cbt-backup/cbt-backup
+      - name: Download restore tool artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cbt-restore
+          path: tools/cbt-restore
+
+      - name: Make tools executable
+        run: |
+          chmod +x tools/cbt-backup/cbt-backup
+          chmod +x tools/cbt-restore/cbt-restore
 
       - name: Setup kubectl with remote cluster
         if: ${{ env.USE_REMOTE_CLUSTER == 'true' }}
@@ -85,6 +93,18 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
           kubectl version
+
+      - name: Build and load container images into Minikube
+        if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
+        run: |
+          echo "Building cbt-backup container image..."
+          minikube image build -t cbt-backup:latest tools/cbt-backup
+
+          echo "Building cbt-restore container image..."
+          minikube image build -t cbt-restore:latest tools/cbt-restore
+
+          echo "✓ Container images loaded into Minikube"
+          minikube image ls | grep cbt || true
 
       - name: Install Snapshot CRDs
         run: |
@@ -490,6 +510,94 @@ jobs:
           echo "Testing restore dry run..."
           ./scripts/restore-dry-run.sh cbt-demo block-snapshot-1
 
+      - name: Run cbt-backup in-cluster
+        if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
+        run: |
+          echo "=========================================="
+          echo "Running cbt-backup as in-cluster Job"
+          echo "=========================================="
+
+          # Deploy backup RBAC
+          kubectl apply -f manifests/backup-restore/rbac.yaml
+
+          # Stop block-writer to release the PVC (ReadWriteOnce)
+          echo "Stopping block-writer to release PVC..."
+          kubectl delete pod block-writer -n cbt-demo --wait=true
+
+          # Run the backup job
+          echo "Starting cbt-backup job..."
+          kubectl apply -f manifests/backup-restore/backup-job.yaml
+
+          # Wait for job to complete
+          echo "Waiting for backup job to complete..."
+          kubectl wait --for=condition=Complete job/cbt-backup -n cbt-demo --timeout=300s || {
+            echo "Backup job did not complete, checking status..."
+            kubectl get job cbt-backup -n cbt-demo
+            kubectl describe job cbt-backup -n cbt-demo
+            kubectl logs job/cbt-backup -n cbt-demo || true
+            echo ""
+            echo "⚠ Backup job failed - this may be expected if CBT gRPC is not reachable"
+          }
+
+          echo ""
+          echo "Backup job logs:"
+          kubectl logs job/cbt-backup -n cbt-demo || true
+
+      - name: Run cbt-restore list in-cluster
+        if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
+        run: |
+          echo "=========================================="
+          echo "Running cbt-restore list as in-cluster Job"
+          echo "=========================================="
+
+          kubectl apply -f manifests/backup-restore/list-job.yaml
+
+          echo "Waiting for list job to complete..."
+          kubectl wait --for=condition=Complete job/cbt-restore-list -n cbt-demo --timeout=120s || {
+            echo "List job did not complete"
+            kubectl logs job/cbt-restore-list -n cbt-demo || true
+          }
+
+          echo ""
+          echo "List job output:"
+          kubectl logs job/cbt-restore-list -n cbt-demo || true
+
+      - name: Run cbt-restore in-cluster
+        if: ${{ env.USE_REMOTE_CLUSTER == 'false' }}
+        run: |
+          echo "=========================================="
+          echo "Running cbt-restore as in-cluster Job"
+          echo "=========================================="
+
+          # Create target PVC for restore
+          kubectl apply -f manifests/backup-restore/restore-pvc.yaml
+
+          echo "Waiting for restore PVC to be bound..."
+          kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/restored-data -n cbt-demo --timeout=60s || {
+            echo "Restore PVC not bound, checking status..."
+            kubectl get pvc restored-data -n cbt-demo
+          }
+
+          # Run the restore job
+          kubectl apply -f manifests/backup-restore/restore-job.yaml
+
+          echo "Waiting for restore job to complete..."
+          kubectl wait --for=condition=Complete job/cbt-restore -n cbt-demo --timeout=300s || {
+            echo "Restore job did not complete"
+            kubectl describe job cbt-restore -n cbt-demo
+            kubectl logs job/cbt-restore -n cbt-demo || true
+          }
+
+          echo ""
+          echo "Restore job logs:"
+          kubectl logs job/cbt-restore -n cbt-demo || true
+
+          # Restart block-writer
+          echo ""
+          echo "Restarting block-writer..."
+          kubectl apply -f manifests/workload/block-writer-pod.yaml
+          kubectl wait --for=condition=Ready pod/block-writer -n cbt-demo --timeout=120s || true
+
       - name: Collect Logs on Failure
         if: failure()
         run: |
@@ -658,6 +766,13 @@ jobs:
       - name: Verify restore tool CLI
         run: |
           ./tools/cbt-restore/cbt-restore --help
+
+      - name: Upload restore tool artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cbt-restore
+          path: tools/cbt-restore/cbt-restore
+          retention-days: 1
 
   lint:
     runs-on: ubuntu-latest

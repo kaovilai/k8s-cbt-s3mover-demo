@@ -133,7 +133,7 @@ cd tools/cbt-backup
 
 ### Tools Structure
 
-**tools/cbt-backup/** - Backup tool (90% complete)
+**tools/cbt-backup/** - Backup tool (complete)
 - `cmd/main.go`: CLI entry point with Cobra commands (create, list)
 - `pkg/metadata/cbt_client.go`: gRPC client for CSI SnapshotMetadata service - **core CBT implementation**
   - `GetAllocatedBlocks()`: Calls GetMetadataAllocated RPC for full backups
@@ -143,8 +143,6 @@ cd tools/cbt-backup
 - `pkg/snapshot/snapshot.go`: Kubernetes VolumeSnapshot creation and management
 - `pkg/s3/client.go`: MinIO client for metadata/block upload/download
 - `pkg/blocks/reader.go`: Block device reader for extracting block data
-
-**TODO:** Block data upload is not yet implemented (currently metadata-only). The infrastructure is complete; need to add actual block reading and S3 upload in `runBackup()`.
 
 **tools/cbt-restore/** - CBT-optimized restore tool
 - `cmd/main.go`: CLI entry point with Cobra commands (restore, plan, list)
@@ -246,7 +244,7 @@ s3://snapshots/
 │   ├── blocks.json      # List of blocks with offset/size
 │   └── chain.json       # Dependency chain for incremental restores
 └── blocks/<snapshot-name>/
-    └── block-<offset>-<size>  # Actual block data (TODO: not yet uploaded)
+    └── block-<offset>-<size>  # Actual block data
 ```
 
 ### Block Mode Volumes
@@ -389,7 +387,7 @@ The backup tool interacts with Kubernetes via:
 1. **CBT API Alpha Status**: Requires Kubernetes 1.33+ (alpha feature, no feature gates needed)
 2. **CSI Driver Support**: Only CSI hostpath driver implements CBT; AWS EBS CSI does not yet support it
 3. **Block Mode Required**: Filesystem-mode volumes do not support CBT
-4. **Backup Tool Status**: Metadata infrastructure complete, block data upload TODO
+4. **Backup Tool Status**: Complete — CBT APIs, metadata, and block data upload all functional
 5. **Restore Tool**: Not yet implemented (planned)
 
 ## References
@@ -439,5 +437,5 @@ git add tools/cbt-backup/pkg/metadata/cbt_client.go
 - Infrastructure: 100% complete
 - Automation scripts: 100% complete
 - CI/CD: 100% complete
-- Backup tool (`tools/cbt-backup/`): 90% complete — CBT gRPC APIs (GetMetadataAllocated, GetMetadataDelta) and S3 metadata operations work; block data upload to S3 is TODO
+- Backup tool (`tools/cbt-backup/`): 100% complete — CBT gRPC APIs, S3 metadata, and block data upload all implemented
 - Restore tool (`tools/cbt-restore/`): implemented — resolves snapshot chains, downloads blocks from S3, writes to device

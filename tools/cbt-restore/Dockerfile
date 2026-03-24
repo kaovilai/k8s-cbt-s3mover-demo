@@ -15,7 +15,7 @@ COPY . .
 # Build the binary
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
-    -o cbt-backup \
+    -o cbt-restore \
     ./cmd
 
 # Final stage
@@ -25,13 +25,7 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 
 # Copy binary from builder
-COPY --from=builder /build/cbt-backup /usr/local/bin/cbt-backup
+COPY --from=builder /build/cbt-restore /usr/local/bin/cbt-restore
 
-# Run as non-root user
-RUN addgroup -g 1000 backup && \
-    adduser -D -u 1000 -G backup backup
-
-USER backup
-
-ENTRYPOINT ["/usr/local/bin/cbt-backup"]
+ENTRYPOINT ["/usr/local/bin/cbt-restore"]
 CMD ["--help"]

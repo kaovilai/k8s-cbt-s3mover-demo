@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cbt-backup
+  namespace: cbt-demo
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: cbt-backup-sa
+      restartPolicy: Never
+      containers:
+      - name: backup
+        image: cbt-backup:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /usr/local/bin/cbt-backup
+        - create
+        - --pvc=block-writer-data
+        - --namespace=cbt-demo
+        - --device=/dev/xvda
+        - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
+        - --s3-access-key=minioadmin
+        - --s3-secret-key=minioadmin123
+        - --s3-bucket=snapshots
+        volumeDevices:
+        - name: data-volume
+          devicePath: /dev/xvda
+        securityContext:
+          privileged: true
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: block-writer-data

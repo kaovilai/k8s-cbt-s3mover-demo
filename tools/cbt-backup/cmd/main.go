@@ -36,8 +36,7 @@ func main() {
 		Long: `A backup tool that uses Kubernetes CSI Changed Block Tracking (CBT)
 to perform incremental backups of block volumes to S3-compatible storage.
 
-NOTE: Full CBT gRPC client implementation is TODO. Currently implements
-full backups with infrastructure for incremental support.`,
+Supports full and incremental backups with block data upload to S3.`,
 	}
 
 	backupCmd := &cobra.Command{
@@ -97,14 +96,14 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	fmt.Println("========================================")
 
 	// Initialize snapshot manager
-	fmt.Println("\n[1/7] Initializing Kubernetes client...")
+	fmt.Println("\n[1/8] Initializing Kubernetes client...")
 	snapMgr, err := snapshot.NewManager(namespace, kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot manager: %w", err)
 	}
 
 	// Initialize S3 client
-	fmt.Println("[2/7] Connecting to S3 storage...")
+	fmt.Println("[2/8] Connecting to S3 storage...")
 	s3Client, err := s3.NewClient(s3.Config{
 		Endpoint:  s3Endpoint,
 		AccessKey: s3AccessKey,
@@ -122,14 +121,14 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Connected to S3 (bucket: %s)\n", s3Bucket)
 
 	// Create VolumeSnapshot
-	fmt.Println("\n[3/7] Creating VolumeSnapshot...")
+	fmt.Println("\n[3/8] Creating VolumeSnapshot...")
 	snap, err := snapMgr.CreateSnapshot(ctx, pvcName, snapshotName, snapshotClass)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot: %w", err)
 	}
 
 	// Wait for snapshot to be ready
-	fmt.Println("[4/7] Waiting for snapshot to be ready...")
+	fmt.Println("[4/8] Waiting for snapshot to be ready...")
 	snap, err = snapMgr.WaitForSnapshotReady(ctx, snap.Name, 5*time.Minute)
 	if err != nil {
 		return fmt.Errorf("failed to wait for snapshot: %w", err)
@@ -154,7 +153,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	fmt.Printf("✓ Snapshot ready: %s (size: %d bytes)\n", snap.Name, manifest.VolumeSize)
 
 	// Initialize CBT client
-	fmt.Println("\n[5/7] Analyzing blocks to backup using CBT...")
+	fmt.Println("\n[5/8] Analyzing blocks to backup using CBT...")
 	cbtClient, err := metadata.NewCBTClient(namespace, kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create CBT client: %w", err)
@@ -224,7 +223,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	manifest.TotalSize = totalSize
 
 	// Upload metadata to S3
-	fmt.Println("\n[6/7] Uploading backup metadata to S3...")
+	fmt.Println("\n[6/8] Uploading backup metadata to S3...")
 
 	// Upload manifest
 	manifestPath := fmt.Sprintf("metadata/%s/manifest.json", snap.Name)
@@ -257,6 +256,48 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("✓ Uploaded chain info: %s\n", chainPath)
 
+	// Upload block data to S3
+	fmt.Println("\n[7/8] Uploading block data to S3...")
+
+	var bytesUploaded int64
+	var blocksUploaded int
+
+	if len(blockList.Blocks) > 0 && devicePath != "" {
+		reader, err := blocks.NewReader(devicePath, blockSize)
+		if err != nil {
+			return fmt.Errorf("failed to open device for reading: %w", err)
+		}
+		defer reader.Close()
+
+		for i, blockMeta := range blockList.Blocks {
+			blockData, err := reader.ReadBlock(blockMeta.Offset, blockMeta.Size)
+			if err != nil {
+				return fmt.Errorf("failed to read block at offset %d: %w", blockMeta.Offset, err)
+			}
+
+			blockPath := fmt.Sprintf("blocks/%s/block-%d-%d", snap.Name, blockMeta.Offset, blockMeta.Size)
+			if err := s3Client.UploadBlock(ctx, blockPath, blockData.Data); err != nil {
+				return fmt.Errorf("failed to upload block at offset %d: %w", blockMeta.Offset, err)
+			}
+
+			bytesUploaded += int64(len(blockData.Data))
+			blocksUploaded++
+
+			if (i+1)%100 == 0 || i == len(blockList.Blocks)-1 {
+				fmt.Printf("  Progress: %d/%d blocks uploaded (%.2f MB)\n",
+					i+1, len(blockList.Blocks),
+					float64(bytesUploaded)/(1024*1024))
+			}
+		}
+
+		fmt.Printf("✓ Uploaded %d blocks (%d bytes) to S3\n", blocksUploaded, bytesUploaded)
+	} else if len(blockList.Blocks) > 0 {
+		fmt.Println("⚠ No device path specified - skipping block data upload")
+		fmt.Println("  Use --device to specify block device path for full backup")
+	} else {
+		fmt.Println("No blocks to upload")
+	}
+
 	// Create backup stats
 	stats := metadata.BackupStats{
 		StartTime:        startTime,
@@ -266,16 +307,16 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		BaseSnapshotName: baseSnapshotName,
 		CBTEnabled:       cbtEnabled,
 		BytesRead:        manifest.TotalSize,
-		BytesUploaded:    manifest.TotalSize,
+		BytesUploaded:    bytesUploaded,
 		BlocksRead:       manifest.TotalBlocks,
-		BlocksUploaded:   manifest.TotalBlocks,
+		BlocksUploaded:   blocksUploaded,
 	}
 
 	if !cbtEnabled {
 		stats.Errors = []string{"CBT not available - metadata only backup"}
 	}
 
-	fmt.Println("\n[7/7] Backup Summary")
+	fmt.Println("\n[8/8] Backup Summary")
 	fmt.Println("========================================")
 	fmt.Printf("Snapshot Name:     %s\n", snap.Name)
 	fmt.Printf("Volume Size:       %d bytes\n", manifest.VolumeSize)

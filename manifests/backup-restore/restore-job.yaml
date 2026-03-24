@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cbt-restore
+  namespace: cbt-demo
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: restore
+        image: cbt-restore:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /usr/local/bin/cbt-restore
+        - restore
+        - --snapshot=block-snapshot-1
+        - --device=/dev/xvda
+        - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
+        - --s3-access-key=minioadmin
+        - --s3-secret-key=minioadmin123
+        - --s3-bucket=snapshots
+        volumeDevices:
+        - name: restore-volume
+          devicePath: /dev/xvda
+        securityContext:
+          privileged: true
+      volumes:
+      - name: restore-volume
+        persistentVolumeClaim:
+          claimName: restored-data
