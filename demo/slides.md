@@ -747,124 +747,6 @@ layout: default
 layout: two-cols
 ---
 
-# Creating Snapshots
-
-<v-clicks>
-
-## Initial Snapshot
-
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshot
-metadata:
-  name: block-snapshot-1
-  namespace: cbt-demo
-spec:
-  volumeSnapshotClassName: csi-hostpath-snapclass
-  source:
-    persistentVolumeClaimName: block-writer-data
-```
-
-Wait for ready state:
-```bash
-kubectl wait volumesnapshot block-snapshot-1 \
-  -n cbt-demo \
-  --for=jsonpath='{.status.readyToUse}'=true
-```
-
-</v-clicks>
-
-::right::
-
-<v-clicks>
-
-## Delta Snapshot
-
-First, create changes:
-```bash
-# Write 100 more blocks to raw device
-dd if=/dev/urandom of=/dev/xvda bs=4096 count=100 seek=100
-```
-
-Then create second snapshot:
-```yaml
-apiVersion: snapshot.storage.k8s.io/v1
-kind: VolumeSnapshot
-metadata:
-  name: block-snapshot-2
-  namespace: cbt-demo
-spec:
-  volumeSnapshotClassName: csi-hostpath-snapclass
-  source:
-    persistentVolumeClaimName: block-writer-data
-```
-
-</v-clicks>
-
----
-layout: default
----
-
-# Use Cases - Full Backup
-
-<v-clicks depth="2">
-
-## Full Snapshot Backup (GetMetadataAllocated)
-
-**Workflow Demonstration** (Phase 3):
-
-1. Create VolumeSnapshot
-2. Deploy snapshot-metadata-lister pod
-3. Query `GetMetadataAllocated` API for all allocated blocks
-4. Returns list of blocks containing actual data
-
-**API Call in Workflow:**
-```bash
-kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -s block-snapshot-1 -n cbt-demo
-```
-
-**Benefits**: Lists only allocated blocks, skips sparse regions
-
-</v-clicks>
-
----
-
-# Use Cases - Incremental Backup
-
-<v-clicks depth="2">
-
-## Incremental Snapshot Backup (GetMetadataDelta)
-
-**Workflow Demonstration** (Phase 4):
-
-1. Write 100 additional blocks (~400KB data)
-2. Create block-snapshot-2
-3. Query `GetMetadataDelta` comparing snapshots
-4. Returns only changed blocks
-
-**API Call in Workflow:**
-```bash
-# Get CSI snapshot handle, then call GetMetadataDelta
-HANDLE=$(kubectl get volumesnapshotcontent $VSC \
-  -o jsonpath="{.status.snapshotHandle}")
-kubectl exec csi-client -- /tools/snapshot-metadata-lister \
-  -P "$HANDLE" -s block-snapshot-2 -n cbt-demo
-```
-
-</v-clicks>
-
-<!--
-- Benefits: Only transfer changed blocks (~400KB delta), base snapshot can be deleted after getting handle
-- Full backup: Use GetMetadataAllocated to skip sparse regions
-- Incremental backup: Use GetMetadataDelta to transfer only changed blocks
-- PR #180 enhancement allows deleting base snapshots after getting handle
-- Key point: This is how production backup tools will integrate CBT
--->
----
-layout: two-cols
----
-
 # Build Tools
 
 <div class="text-sm">
@@ -1079,83 +961,53 @@ CI/CD automation highlights:
 layout: default
 ---
 
-# Actual Workflow Results - Infrastructure
+# CI Results (Run #87)
 
 <div class="text-sm">
 
-**Latest Successful Run**: [#87 (18862281941)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/18862281941)
-**Date**: Oct 28, 2025 | **Total Time**: 6m 0s
+<div class="grid grid-cols-2 gap-6">
+<div>
 
-<v-clicks>
+<v-click>
 
 ## Infrastructure Deployed
 
-- **Cluster**: Minikube (4 CPUs, 8GB RAM, containerd)
-- **Snapshot Controller**: Deployed with v8.2.0 CRDs
-- **CSI Driver**: hostpath with **canary** tag + snapshot-metadata sidecar
-- **MinIO S3**: S3-compatible backup storage
-- **Block Writer**: Pod with **2Gi block PVC** (/dev/xvdb)
-- **csi-client pod**: snapshot-metadata-lister with RBAC
+- **Cluster**: Minikube (4 CPUs, 8GB RAM)
+- **CSI Driver**: hostpath canary + metadata sidecar
+- **Snapshots**: ~4s creation time each
 
-## Snapshot Performance
+| Snapshot | Blocks | Size |
+|----------|--------|------|
+| block-snapshot-1 | 100 | ~400KB |
+| block-snapshot-2 | 200 | ~800KB |
 
-| Snapshot | Data | Creation Time | Status |
-|----------|------|---------------|--------|
-| block-snapshot-1 | 100 blocks (~400KB) | **~4s** | ✓ Ready |
-| block-snapshot-2 | 200 blocks (~800KB) | **~4s** | ✓ Ready |
-
-</v-clicks>
+</v-click>
 
 </div>
+<div>
 
-<!--
-Actual results from CI run #87:
-- Full infrastructure deployed successfully in Minikube
-- Snapshot creation is very fast (~4s per snapshot)
-- Using canary builds for latest CBT features (PR #180)
-- Real data: 100 blocks → 200 blocks, ~400KB → ~800KB
-- Emphasize: This is a real, reproducible demo running in CI
--->
+<v-click>
 
----
-layout: default
----
+## API Status
 
-# Actual Workflow Results - API Status
-
-<div class="text-sm">
-
-<v-clicks>
-
-## CBT API Call Status (Run #87)
-
-✓ **API Calls Complete Successfully**
 - GetMetadataAllocated: Executes without errors
 - GetMetadataDelta: Executes without errors
-- **Current Limitation**: CSI hostpath driver does not implement SnapshotMetadataService gRPC endpoint, so no metadata is returned
-- **Expected**: With a production CSI driver that implements CBT, these calls would return block metadata
+- **Limitation**: hostpath driver returns no metadata
+- **PR #180**: CSI handle support confirmed
 
-## PR #180 Support Confirmed ✅
+</v-click>
 
-**Now using build with PR #180 merged** (Oct 15, 2025):
-- Image: `ghcr.io/kaovilai/csi-snapshot-metadata:multiarch-grpc-health-probe`
-- Image: `gcr.io/k8s-staging-sig-storage/hostpathplugin:canary`
-- **Key Feature**: GetMetadataDelta accepts CSI snapshot handles instead of names
-- **Benefit**: Base snapshot can be deleted after obtaining handle
-- TLS-secured gRPC endpoint on port 6443
-
-</v-clicks>
+</div>
+</div>
 
 </div>
 
 <!--
-API Status - important clarification:
-- APIs execute successfully without errors
-- Current limitation: hostpath driver doesn't implement SnapshotMetadataService gRPC endpoint
-- This is expected - hostpath is a simple driver for demonstration
-- Production CSI drivers (EBS, Azure Disk, etc.) will implement full CBT when they add support
+- Full infrastructure deployed successfully in Minikube
+- Snapshot creation is very fast (~4s per snapshot)
+- APIs execute successfully, hostpath driver doesn't return metadata (expected)
+- Production CSI drivers will implement full CBT
 - PR #180 support confirmed in canary build (Oct 15, 2025)
-- The demo validates the workflow and API integration, not full metadata functionality
 -->
 
 ---
