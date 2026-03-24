@@ -682,6 +682,7 @@ jobs:
         with:
           scandir: './scripts'
           ignore_paths: '.git'
+          shellcheck_flags: '-x'
 
       - name: Lint backup tool
         working-directory: tools/cbt-backup
