@@ -163,6 +163,39 @@ HOSTPATHPLUGIN_TAG="canary" \
 echo "✓ CSI driver deployment initiated"
 
 echo ""
+echo "Step 5b: Re-apply local testdata with fresh TLS certificates"
+echo "-----------------------------------"
+echo "The upstream deploy.sh applies its own testdata with potentially stale certs."
+echo "Re-applying our local testdata to ensure fresh TLS certificates are used."
+
+# Re-create TLS secret with our freshly generated certs (overwrite upstream's stale secret)
+CERT_DIR=$(ls -td /tmp/csi-certs-* 2>/dev/null | head -1)
+if [ -n "$CERT_DIR" ] && [ -f "$CERT_DIR/server-cert.pem" ]; then
+    echo "Re-creating TLS secret with freshly generated certificates..."
+    kubectl delete secret csi-snapshot-metadata-certs -n "$NAMESPACE" --ignore-not-found=true
+    kubectl create secret tls csi-snapshot-metadata-certs \
+        --namespace="$NAMESPACE" \
+        --cert="$CERT_DIR/server-cert.pem" \
+        --key="$CERT_DIR/server-key.pem"
+    echo "✓ TLS secret re-created with fresh certificates"
+else
+    echo "⚠ Could not find fresh certificates directory, keeping existing secret"
+fi
+
+# Re-apply our local SnapshotMetadataService CR (with freshly generated CA cert)
+echo "Re-applying local SnapshotMetadataService CR..."
+kubectl apply -f "$SCRIPT_DIR/testdata/snapshotmetadataservice.yaml" --force
+echo "✓ SnapshotMetadataService CR updated with fresh CA cert"
+
+# Re-apply local service definition
+kubectl apply -f "$SCRIPT_DIR/testdata/csi-snapshot-metadata-service.yaml"
+echo "✓ Snapshot metadata service re-applied"
+
+# Restart CSI driver pod to pick up the new TLS secret
+echo "Restarting CSI driver pod to pick up new TLS certificates..."
+kubectl delete pod csi-hostpathplugin-0 -n "$NAMESPACE" --wait=true 2>/dev/null || true
+
+echo ""
 echo "Step 6: Wait for CSI Driver Pods"
 echo "-----------------------------------"
 echo "Waiting for CSI driver pods to be created..."
