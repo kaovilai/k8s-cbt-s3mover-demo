@@ -7,14 +7,14 @@ spec:
   serviceAccountName: csi-client-sa
   initContainers:
   - name: install-client
-    image: golang:1.24.0
+    image: golang:1.25
     command:
     - /bin/sh
     - -c
     - |
       apt-get update && apt-get install -y git
       git clone https://github.com/kubernetes-csi/external-snapshot-metadata.git /tmp/repo
-      cd /tmp/repo/examples/snapshot-metadata-lister
+      cd /tmp/repo/tools/snapshot-metadata-lister
       CGO_ENABLED=0 go build -o /output/snapshot-metadata-lister .
     volumeMounts:
     - name: shared-volume
