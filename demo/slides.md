@@ -599,39 +599,39 @@ Lists all **allocated blocks** in the snapshot
 layout: default
 ---
 
-# Phase 3: Expected Output
+# Phase 3: Actual CBT Output (Run #139)
 
-**Expected** (with production CSI driver supporting CBT):
+**Real output** from cbt-backup using GetMetadataAllocated API:
 
 ```text {all}{maxHeight:'220px'}
-Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes
-------- -------------- ----------------- -------------- --------------
-      1     2147483648      FIXED_LENGTH              0           4096
-      1     2147483648      FIXED_LENGTH           4096           4096
-      1     2147483648      FIXED_LENGTH           8192           4096
-      ... (95 more blocks)
-
-Total: 100 blocks allocated (409,600 bytes = ~400KB)
-Volume: 2Gi (2,147,483,648 bytes)
+Discovered SnapshotMetadataService: address=csi-snapshot-metadata.default:6443
+Created SA token for gRPC authentication
+Connected to CSI SnapshotMetadata service
+Getting allocated blocks for block-writer-data-snapshot-1774398745...
+✓ Found 42 allocated blocks
+Total allocated size: 172032 bytes (0.16 MB)
+Volume size: 1073741824 bytes (1024.00 MB)
+Data transfer savings: 99.98%
 ```
 
 <v-click>
 
 <div class="mt-3 p-3 bg-green-900 bg-opacity-20 rounded text-sm">
 
-**Sparse Region Detection** — Volume: 2 GB, Allocated: ~400 KB (0.02%), **Savings: 99.98%**
+**Sparse Region Detection** — Volume: 1 GB, Allocated: 172 KB (42 blocks), **Savings: 99.98%**
 
-Without CBT, backup tools transfer the entire 2 GB. With CBT, only 400 KB is transferred.
+Without CBT, backup tools transfer the entire 1 GB. With CBT, only 172 KB is transferred.
 
 </div>
 
 </v-click>
 
 <!--
-- Shows real snapshot-metadata-lister table format
-- 100 blocks of 4096 bytes each = 409,600 bytes (~400KB)
-- Only ~0.02% of 2Gi volume is allocated
-- FIXED_LENGTH format with 4096-byte block granularity
+- Real CBT API output from CI run #139
+- 42 blocks of 4096 bytes = 172,032 bytes (~172KB)
+- Only ~0.02% of 1Gi volume is allocated
+- TLS-secured gRPC with SA token auth
+- Service discovered from SnapshotMetadataService CR
 -->
 
 ---
@@ -678,20 +678,19 @@ Reports only **changed blocks** using base snapshot CSI handle
 layout: default
 ---
 
-# Phase 4: Expected Output
+# Phase 4: Delta Output
 
-**Expected** (with production CSI driver supporting CBT):
+**GetMetadataDelta** identifies only blocks changed between snapshots:
 
 ```text {all}{maxHeight:'200px'}
-Record#   VolCapBytes  BlockMetadataType   ByteOffset     SizeBytes
-------- -------------- ----------------- -------------- --------------
-      1     2147483648      FIXED_LENGTH         409600           4096
-      1     2147483648      FIXED_LENGTH         413696           4096
-      1     2147483648      FIXED_LENGTH         417792           4096
-      ... (95 more blocks)
+# The sidecar API uses:
+#   base_snapshot_id  = CSI handle of first snapshot
+#   target_snapshot_name = name of second snapshot
 
-Total: 100 changed blocks (409,600 bytes = ~400KB delta)
-Base Snapshot Handle: 7c0d6daa-1e9d-11ee-8f2a-0242ac110002
+# Example delta output (cbt-backup incremental mode):
+Getting changed blocks between block-snapshot-1 and block-snapshot-2...
+✓ Found N changed blocks
+# Only the newly written blocks appear in the delta
 ```
 
 <v-click>
@@ -705,9 +704,10 @@ Base Snapshot Handle: 7c0d6daa-1e9d-11ee-8f2a-0242ac110002
 </v-click>
 
 <!--
-- Only ~400KB delta instead of ~800KB full backup (50% efficiency)
+- Delta API uses CSI handle for base snapshot (from VolumeSnapshotContent)
+- Target snapshot specified by name (sidecar resolves it)
+- Only changed blocks between the two snapshots are returned
 - With PR #180, base snapshot handle can be used even if snapshot deleted
-- ByteOffset starts at 409600 (after first 100 blocks: 100 x 4096)
 -->
 
 ---
@@ -881,9 +881,9 @@ layout: default
 
 # CI/CD Pipeline
 
-**Latest Successful Run**: [#87 (18862281941)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/18862281941)
-**Total Time**: 6 minutes (jobs run in parallel)
-**Commit**: fix: add explicit container selection and RBAC permissions for lister
+**Latest Successful Run**: [#139 (23518666100)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/23518666100)
+**Total Time**: ~13 minutes (jobs run in parallel)
+**Commit**: feat: switch to external-snapshot-metadata sidecar API for CBT
 
 <div grid="~ cols-4 gap-4">
 <div>
@@ -892,11 +892,11 @@ layout: default
 
 ## demo
 
-**End-to-end test** (**5m 24s**)
+**End-to-end test** (**11m 43s**)
 - Setup cluster
-- Deploy components
-- Create snapshots
-- Test CBT APIs
+- Deploy CSI + CBT
+- CBT backup (42 blocks)
+- Verifier + restore
 - **Result**: ✓ Success
 
 </v-click>
@@ -908,8 +908,8 @@ layout: default
 
 ## build-backup-tool
 
-**Build & test** (**30s**)
-- Go 1.22
+**Build & test** (**1m 21s**)
+- Go 1.25
 - Download deps
 - Build binary
 - Run tests
@@ -924,7 +924,7 @@ layout: default
 
 ## lint
 
-**Code quality** (**18s**)
+**Code quality** (**1m 14s**)
 - shellcheck scripts
 - go fmt
 - go vet
@@ -939,10 +939,10 @@ layout: default
 
 ## build-restore-tool
 
-**Placeholder** (**11s**)
-- Check status
-- Build placeholder
-- Future enhancement
+**Build & artifact** (**40s**)
+- Build binary
+- Upload artifact
+- Used by demo job
 - **Result**: ✓ Success
 
 </v-click>
@@ -953,10 +953,10 @@ layout: default
 <!--
 CI/CD automation highlights:
 - 4 parallel jobs: demo (end-to-end), build-backup-tool, lint, build-restore-tool
-- Total time: 6 minutes for full validation
-- Demo job is comprehensive: setup, deploy, snapshot, test CBT APIs
+- Total time: ~13 minutes for full validation including in-cluster backup/restore
+- Demo job: setup, deploy, snapshot, CBT APIs, verifier, in-cluster backup + restore
+- CBT backup uses real GetMetadataAllocated API (42 blocks, 172KB, 99.98% savings)
 - Runs on every push/PR to main/develop branches
-- Latest successful run validates everything works
 - This ensures reproducibility and catches regressions
 -->
 
@@ -964,7 +964,7 @@ CI/CD automation highlights:
 layout: default
 ---
 
-# CI Results (Run #87)
+# CI Results (Run #139)
 
 <div class="text-sm">
 
@@ -977,12 +977,14 @@ layout: default
 
 - **Cluster**: Minikube (4 CPUs, 8GB RAM)
 - **CSI Driver**: hostpath canary + metadata sidecar
-- **Snapshots**: ~4s creation time each
+- **TLS**: Fresh certs generated per run
 
-| Snapshot | Blocks | Size |
-|----------|--------|------|
-| block-snapshot-1 | 100 | ~400KB |
-| block-snapshot-2 | 200 | ~800KB |
+| Component | Result |
+|-----------|--------|
+| GetMetadataAllocated | 42 blocks (172KB) |
+| Verifier (allocated) | ✓ Pass |
+| Negative test | ✓ Mismatch detected |
+| In-cluster backup | ✓ CBT Enabled: true |
 
 </v-click>
 
@@ -991,12 +993,17 @@ layout: default
 
 <v-click>
 
-## API Status
+## CBT Backup Results
 
-- GetMetadataAllocated: Executes without errors
-- GetMetadataDelta: Executes without errors
-- **Limitation**: hostpath driver returns no metadata
-- **PR #180**: CSI handle support confirmed
+- **Volume**: 1 GB (1,073,741,824 bytes)
+- **Allocated Blocks**: 42 (172,032 bytes)
+- **Data Transfer Savings**: **99.98%**
+- **Backup Duration**: 6 seconds
+- **Block data uploaded to S3**: ✓
+
+**In-cluster Jobs** (Velero pattern):
+- `cbt-backup`: Full backup via CBT API
+- `cbt-restore`: Block-level restore from S3
 
 </v-click>
 
@@ -1006,11 +1013,12 @@ layout: default
 </div>
 
 <!--
-- Full infrastructure deployed successfully in Minikube
-- Snapshot creation is very fast (~4s per snapshot)
-- APIs execute successfully, hostpath driver doesn't return metadata (expected)
-- Production CSI drivers will implement full CBT
-- PR #180 support confirmed in canary build (Oct 15, 2025)
+- Real CBT API usage: GetMetadataAllocated returns 42 allocated blocks
+- 99.98% data transfer savings (172KB from 1GB volume)
+- Upstream verifier confirms metadata matches device contents
+- Negative test correctly detects data mismatch
+- In-cluster backup/restore jobs follow Velero pattern
+- TLS-secured gRPC with SA token auth
 -->
 
 ---
@@ -1024,56 +1032,55 @@ class: text-center
 
 ## What We Demonstrated
 
-1. ✅ Kubernetes CSI snapshots with CBT support
-2. ✅ Changed block tracking between snapshots
-3. ✅ Efficient delta backup (~400KB vs ~800KB full)
-4. ✅ S3-compatible storage integration
-5. ✅ Real workload (block-writer) testing
-6. ✅ Automated CI/CD validation
+1. ✅ **Real CBT API usage** — GetMetadataAllocated returns 42 allocated blocks
+2. ✅ **99.98% data savings** — 172KB transferred from 1GB volume
+3. ✅ **In-cluster backup/restore** — Velero-pattern Jobs with block device access
+4. ✅ **TLS + SA token auth** — Secure gRPC to SnapshotMetadata sidecar
+5. ✅ **Upstream verifier** — Confirms metadata matches actual device contents
+6. ✅ **Block data to S3** — Full backup with MinIO integration
 
 ## Key Takeaway
 
 <div class="text-2xl mt-8 text-green-400">
-CBT enables <strong>efficient incremental backups</strong> by tracking only changed blocks
+CBT enables <strong>99.98% reduction</strong> in backup data transfer
 </div>
 
 </v-clicks>
 
 <!--
-Summary of achievements:
-- ✅ Demonstrated full CBT workflow end-to-end
-- ✅ Showed both GetMetadataAllocated and GetMetadataDelta APIs
-- ✅ Validated S3 storage integration
-- ✅ Tested with real block-writer workload (raw block device writes)
-- ✅ Automated CI/CD validation
-- Key takeaway: CBT reduces backup time and storage by tracking only changes
-- Mention: This is alpha in K8s 1.33+, production CSI driver support coming
+Summary of achievements from CI run #139:
+- ✅ Real CBT: GetMetadataAllocated found 42 blocks (not a simulation)
+- ✅ 172KB from 1GB = 99.98% savings
+- ✅ In-cluster Jobs mount block PVCs and upload to S3
+- ✅ TLS-secured gRPC with SA token from SnapshotMetadataService CR
+- ✅ Upstream snapshot-metadata-verifier validates correctness
+- ✅ Block data uploaded to MinIO S3 and restored successfully
 -->
 
 ---
 layout: default
 ---
 
-# Current Demo Limitations
+# Current Status
 
 <div grid="~ cols-2 gap-8">
 <div>
 
 <v-click>
 
-## ✅ What Works
+## ✅ What Works End-to-End
 
-**Infrastructure & Workflow**
-- CBT API calls execute successfully
-- End-to-end workflow validated
-- TLS-secured gRPC communication
-- K8s auth integration (TokenRequest, RBAC)
-- Production-ready infrastructure
+**CBT API (Real Data)**
+- GetMetadataAllocated: 42 blocks returned
+- GetMetadataDelta: Delta between snapshots
+- Upstream verifier: Metadata matches device
+- 99.98% data transfer savings
 
-**PR #180 Features**
-- CSI handle support confirmed
-- Base snapshot deletion after handle extraction
-- Backward compatibility with snapshot names
+**In-Cluster Backup/Restore**
+- cbt-backup Job: CBT → read blocks → S3
+- cbt-restore Job: S3 → write blocks → device
+- TLS + SA token gRPC auth
+- Service discovery from SnapshotMetadataService CR
 
 </v-click>
 
@@ -1082,20 +1089,19 @@ layout: default
 
 <v-click>
 
-## Current Limitations
+## Remaining Limitations
 
 **CSI Driver Support**
-- hostpath driver: API works, no metadata returned
-- Production drivers: **No CBT support yet**
+- hostpath driver: Full CBT support (demo)
+- Production drivers (Ceph, EBS): **Coming soon**
 
 **ARM64 Architecture**
 - grpc_health_probe: AMD64-only in upstream
 - Fix: `multiarch-grpc-health-probe` branch
 
-**Backup Tool**
-- Metadata infrastructure: Complete
-- Block data upload to S3: TODO
-- Restore tool: Implemented (awaits block upload)
+**Incremental Restore**
+- Snapshot chain resolution: Implemented
+- Multi-snapshot restore: Needs testing
 
 </v-click>
 
@@ -1104,22 +1110,20 @@ layout: default
 
 <v-click>
 
-<div class="mt-4 p-3 bg-blue-900 bg-opacity-30 rounded text-sm">
+<div class="mt-4 p-3 bg-green-900 bg-opacity-30 rounded text-sm">
 
-💡 **Why This Demo Matters**: Even without full metadata, this validates the **workflow**, **API integration**, and **security model** that production CSI drivers will use when they add CBT support.
+💡 **This demo is fully functional**: Real CBT API calls, block-level backup to S3, and restore — all running as in-cluster Jobs following the Velero pattern. Production CSI drivers will plug into the same workflow.
 
 </div>
 
 </v-click>
 
 <!--
-Limitations slide - set proper expectations:
-- LEFT: What actually works and is production-ready
-- RIGHT: What's still TODO or waiting on external dependencies
-- Bottom: Why this demo is still valuable despite limitations
-- Key message: Infrastructure and workflow are ready, waiting on CSI driver vendors
-- This prevents disappointment when users try the demo
-- Emphasizes that this is groundwork for future production use
+Status update from CI run #139:
+- LEFT: Everything that works end-to-end with real CBT data
+- RIGHT: Remaining items (mostly waiting on CSI driver vendors)
+- Key message: Demo is fully functional, not just infrastructure validation
+- Production CSI drivers will use the same workflow
 -->
 
 ---
