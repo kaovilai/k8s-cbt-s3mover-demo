@@ -9,8 +9,8 @@ import (
 	"io"
 	"time"
 
-	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-backup/pkg/blocks"
+	api "github.com/kubernetes-csi/external-snapshot-metadata/pkg/api"
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	snapclientset "github.com/kubernetes-csi/external-snapshotter/client/v8/clientset/versioned"
 	"google.golang.org/grpc"
@@ -24,25 +24,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// bearerToken implements grpc credentials.PerRPCCredentials for bearer token auth
-type bearerToken struct {
-	token string
-}
-
-func (t bearerToken) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
-	return map[string]string{
-		"authorization": "Bearer " + t.token,
-	}, nil
-}
-
-func (t bearerToken) RequireTransportSecurity() bool {
-	return true
-}
-
-// CBTClient interfaces with the CSI SnapshotMetadata service
+// CBTClient interfaces with the CSI SnapshotMetadata service via the
+// external-snapshot-metadata sidecar's gRPC API.
 type CBTClient struct {
 	conn               *grpc.ClientConn
-	client             csi.SnapshotMetadataClient
+	client             api.SnapshotMetadataClient
 	snapClient         *snapclientset.Clientset
 	kubeClient         *kubernetes.Clientset
 	dynClient          dynamic.Interface
@@ -50,15 +36,11 @@ type CBTClient struct {
 	namespace          string
 	serviceAccountName string
 	socketAddress      string // override endpoint (skips discovery)
+	securityToken      string // SA token for gRPC security_token field
 }
 
 // NewCBTClient creates a new CBT client
-// This implementation:
-// 1. Creates a Kubernetes client for snapshot API
-// 2. Discovers the SnapshotMetadataService endpoint
-// 3. Establishes gRPC connection to the CSI driver
 func NewCBTClient(namespace string, kubeconfig string, serviceAccountName string) (*CBTClient, error) {
-	// Create Kubernetes config
 	var config *rest.Config
 	var err error
 
@@ -71,19 +53,16 @@ func NewCBTClient(namespace string, kubeconfig string, serviceAccountName string
 		return nil, fmt.Errorf("failed to create kubernetes config: %w", err)
 	}
 
-	// Create snapshot client
 	snapClient, err := snapclientset.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create snapshot client: %w", err)
 	}
 
-	// Create core Kubernetes client (for SA token creation)
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	// Create dynamic client (for SnapshotMetadataService CR)
 	dynClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
@@ -93,16 +72,14 @@ func NewCBTClient(namespace string, kubeconfig string, serviceAccountName string
 		serviceAccountName = "cbt-backup-sa"
 	}
 
-	client := &CBTClient{
+	return &CBTClient{
 		snapClient:         snapClient,
 		kubeClient:         kubeClient,
 		dynClient:          dynClient,
 		config:             config,
 		namespace:          namespace,
 		serviceAccountName: serviceAccountName,
-	}
-
-	return client, nil
+	}, nil
 }
 
 // SetEndpoint overrides the default gRPC endpoint address (skips service discovery)
@@ -128,7 +105,6 @@ func (c *CBTClient) discoverService(ctx context.Context) (address, caCertBase64,
 		return "", "", "", fmt.Errorf("no SnapshotMetadataService resources found")
 	}
 
-	// Use the first available service (typically there's only one)
 	item := list.Items[0]
 	spec, ok := item.Object["spec"].(map[string]interface{})
 	if !ok {
@@ -170,13 +146,12 @@ func (c *CBTClient) createSAToken(ctx context.Context, audience string) (string,
 	return token.Status.Token, nil
 }
 
-// Connect establishes the gRPC connection to the CSI driver
+// Connect establishes the gRPC connection to the snapshot metadata sidecar
 func (c *CBTClient) Connect(ctx context.Context) error {
 	if c.conn != nil {
-		return nil // Already connected
+		return nil
 	}
 
-	// Use a timeout to avoid hanging forever if the endpoint is unreachable
 	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -184,39 +159,34 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 	var dialOpts []grpc.DialOption
 
 	if c.socketAddress != "" {
-		// Manual endpoint override — use insecure (for testing/debugging)
 		address = c.socketAddress
 		fmt.Printf("Using manually configured endpoint: %s\n", address)
 		dialOpts = append(dialOpts,
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
 		)
 	} else {
-		// Discover service from SnapshotMetadataService CR
 		svcAddress, caCertB64, audience, err := c.discoverService(connectCtx)
 		if err != nil {
 			return fmt.Errorf("failed to discover snapshot metadata service: %w", err)
 		}
 		address = svcAddress
 
-		// Build TLS credentials from CA cert
 		tlsConfig, err := buildTLSConfig(caCertB64)
 		if err != nil {
 			return fmt.Errorf("failed to build TLS config: %w", err)
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 
-		// Create SA token for authentication
 		token, err := c.createSAToken(connectCtx, audience)
 		if err != nil {
 			return fmt.Errorf("failed to create authentication token: %w", err)
 		}
-		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(bearerToken{token: token}))
+		c.securityToken = token
 		fmt.Println("Created SA token for gRPC authentication")
 	}
 
 	dialOpts = append(dialOpts, grpc.WithBlock())
 
-	// Establish gRPC connection
 	fmt.Printf("Connecting to CSI SnapshotMetadata service at %s...\n", address)
 	conn, err := grpc.DialContext(
 		connectCtx,
@@ -228,7 +198,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 	}
 
 	c.conn = conn
-	c.client = csi.NewSnapshotMetadataClient(conn)
+	c.client = api.NewSnapshotMetadataClient(conn)
 	fmt.Println("Connected to CSI SnapshotMetadata service")
 
 	return nil
@@ -256,39 +226,18 @@ func buildTLSConfig(caCertBase64 string) (*tls.Config, error) {
 }
 
 // GetAllocatedBlocks returns all allocated blocks in a snapshot
-// This calls the CSI GetMetadataAllocated RPC
+// Uses the sidecar's GetMetadataAllocated RPC (which takes snapshot name, not CSI handle)
 func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string) ([]blocks.BlockMetadata, error) {
 	if c.client == nil {
-		return nil, fmt.Errorf("not connected to CSI driver - call Connect() first")
+		return nil, fmt.Errorf("not connected - call Connect() first")
 	}
 
-	// Get VolumeSnapshot to extract CSI snapshot handle
-	snapshot, err := c.snapClient.SnapshotV1().VolumeSnapshots(c.namespace).Get(ctx, snapshotName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VolumeSnapshot %s: %w", snapshotName, err)
-	}
-
-	if snapshot.Status == nil || snapshot.Status.BoundVolumeSnapshotContentName == nil {
-		return nil, fmt.Errorf("snapshot %s is not bound to a VolumeSnapshotContent", snapshotName)
-	}
-
-	// Get VolumeSnapshotContent to extract CSI snapshot handle
-	vsc, err := c.snapClient.SnapshotV1().VolumeSnapshotContents().Get(ctx, *snapshot.Status.BoundVolumeSnapshotContentName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get VolumeSnapshotContent: %w", err)
-	}
-
-	if vsc.Status == nil || vsc.Status.SnapshotHandle == nil {
-		return nil, fmt.Errorf("VolumeSnapshotContent has no snapshot handle")
-	}
-
-	snapshotHandle := *vsc.Status.SnapshotHandle
-
-	// Call GetMetadataAllocated RPC
-	req := &csi.GetMetadataAllocatedRequest{
-		SnapshotId:     snapshotHandle,
+	req := &api.GetMetadataAllocatedRequest{
+		SecurityToken: c.securityToken,
+		Namespace:     c.namespace,
+		SnapshotName:  snapshotName,
 		StartingOffset: 0,
-		MaxResults:     0, // 0 means no limit
+		MaxResults:     0,
 	}
 
 	stream, err := c.client.GetMetadataAllocated(ctx, req)
@@ -296,7 +245,6 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string)
 		return nil, fmt.Errorf("failed to call GetMetadataAllocated: %w", err)
 	}
 
-	// Collect block metadata from stream
 	var blockList []blocks.BlockMetadata
 	for {
 		resp, err := stream.Recv()
@@ -307,14 +255,11 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string)
 			return nil, fmt.Errorf("error receiving block metadata: %w", err)
 		}
 
-		// Convert CSI BlockMetadata to our format
-		if resp.BlockMetadata != nil {
-			for _, block := range resp.BlockMetadata {
-				blockList = append(blockList, blocks.BlockMetadata{
-					Offset: block.ByteOffset,
-					Size:   block.SizeBytes,
-				})
-			}
+		for _, block := range resp.BlockMetadata {
+			blockList = append(blockList, blocks.BlockMetadata{
+				Offset: block.ByteOffset,
+				Size:   block.SizeBytes,
+			})
 		}
 	}
 
@@ -322,19 +267,15 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string)
 }
 
 // GetDeltaBlocks returns blocks that changed between two snapshots
-// This calls the CSI GetMetadataDelta RPC
-//
-// IMPORTANT: As of kubernetes-csi/external-snapshot-metadata PR #180, the API changed:
-//   - The field name changed from base_snapshot_name to base_snapshot_id
-//   - baseSnapshotID should now be the CSI snapshot handle (from VolumeSnapshotContent.Status.SnapshotHandle)
-//     rather than the VolumeSnapshot name
-//   - The CSI handle approach allows computing deltas even after the base snapshot has been deleted
+// Uses the sidecar's GetMetadataDelta RPC.
+// baseSnapshotName is resolved to its CSI handle (base_snapshot_id field).
+// targetSnapshotName is passed directly (target_snapshot_name field).
 func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotName, targetSnapshotName string) ([]blocks.BlockMetadata, error) {
 	if c.client == nil {
-		return nil, fmt.Errorf("not connected to CSI driver - call Connect() first")
+		return nil, fmt.Errorf("not connected - call Connect() first")
 	}
 
-	// Get base snapshot's CSI handle
+	// Get base snapshot's CSI handle (the sidecar uses base_snapshot_id = CSI handle)
 	baseSnapshot, err := c.snapClient.SnapshotV1().VolumeSnapshots(c.namespace).Get(ctx, baseSnapshotName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get base VolumeSnapshot %s: %w", baseSnapshotName, err)
@@ -355,33 +296,13 @@ func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotName, target
 
 	baseHandle := *baseVSC.Status.SnapshotHandle
 
-	// Get target snapshot's CSI handle
-	targetSnapshot, err := c.snapClient.SnapshotV1().VolumeSnapshots(c.namespace).Get(ctx, targetSnapshotName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get target VolumeSnapshot %s: %w", targetSnapshotName, err)
-	}
-
-	if targetSnapshot.Status == nil || targetSnapshot.Status.BoundVolumeSnapshotContentName == nil {
-		return nil, fmt.Errorf("target snapshot %s is not bound", targetSnapshotName)
-	}
-
-	targetVSC, err := c.snapClient.SnapshotV1().VolumeSnapshotContents().Get(ctx, *targetSnapshot.Status.BoundVolumeSnapshotContentName, metav1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get target VolumeSnapshotContent: %w", err)
-	}
-
-	if targetVSC.Status == nil || targetVSC.Status.SnapshotHandle == nil {
-		return nil, fmt.Errorf("target VolumeSnapshotContent has no snapshot handle")
-	}
-
-	targetHandle := *targetVSC.Status.SnapshotHandle
-
-	// Call GetMetadataDelta RPC (using CSI handles per PR #180)
-	req := &csi.GetMetadataDeltaRequest{
-		BaseSnapshotId:   baseHandle,
-		TargetSnapshotId: targetHandle,
-		StartingOffset:   0,
-		MaxResults:       0, // 0 means no limit
+	req := &api.GetMetadataDeltaRequest{
+		SecurityToken:      c.securityToken,
+		Namespace:          c.namespace,
+		BaseSnapshotId:     baseHandle,
+		TargetSnapshotName: targetSnapshotName,
+		StartingOffset:     0,
+		MaxResults:         0,
 	}
 
 	stream, err := c.client.GetMetadataDelta(ctx, req)
@@ -389,7 +310,6 @@ func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotName, target
 		return nil, fmt.Errorf("failed to call GetMetadataDelta: %w", err)
 	}
 
-	// Collect block metadata from stream
 	var blockList []blocks.BlockMetadata
 	for {
 		resp, err := stream.Recv()
@@ -400,14 +320,11 @@ func (c *CBTClient) GetDeltaBlocks(ctx context.Context, baseSnapshotName, target
 			return nil, fmt.Errorf("error receiving delta block metadata: %w", err)
 		}
 
-		// Convert CSI BlockMetadata to our format
-		if resp.BlockMetadata != nil {
-			for _, block := range resp.BlockMetadata {
-				blockList = append(blockList, blocks.BlockMetadata{
-					Offset: block.ByteOffset,
-					Size:   block.SizeBytes,
-				})
-			}
+		for _, block := range resp.BlockMetadata {
+			blockList = append(blockList, blocks.BlockMetadata{
+				Offset: block.ByteOffset,
+				Size:   block.SizeBytes,
+			})
 		}
 	}
 
