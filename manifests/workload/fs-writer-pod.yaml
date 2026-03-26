@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fs-writer-data
+  namespace: cbt-demo
+spec:
+  accessModes:
+  - ReadWriteOnce
+  # Filesystem mode - how most real applications use volumes
+  volumeMode: Filesystem
+  storageClassName: csi-hostpath-sc
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fs-writer
+  namespace: cbt-demo
+  labels:
+    app: fs-writer
+spec:
+  restartPolicy: Always
+  containers:
+  - name: writer
+    image: busybox:1.37.0
+    command:
+    - /bin/sh
+    - -c
+    - "tail -f /dev/null"
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+    securityContext:
+      privileged: true
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: fs-writer-data

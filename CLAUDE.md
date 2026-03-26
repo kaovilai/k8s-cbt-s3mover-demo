@@ -417,6 +417,19 @@ gh run view 18798961487 --job=<job-id> --log
 sleep 180 && gh run view 18798961487
 ```
 
+### Development Iteration Loop
+
+When developing in this repo, follow the **commit-push-watch-iterate** cycle:
+
+```
+commit -> push -> watch CI -> run on cluster -> iterate -> commit -> push
+```
+
+1. Commit and push changes
+2. Watch CI with `gh run watch --exit-status`
+3. If CI passes, run on cluster to validate
+4. If issues found, iterate and repeat
+
 ### Git Commit Practices
 
 **Use specific file paths, not `git add -A`:**
