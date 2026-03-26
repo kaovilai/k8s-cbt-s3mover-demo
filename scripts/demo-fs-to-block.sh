@@ -93,6 +93,14 @@ kubectl wait --for=jsonpath='{.status.readyToUse}'=true \
 SNAP_SIZE=$(kubectl get volumesnapshot fs-snapshot-1 -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
 echo "  Snapshot ready (restore size: $SNAP_SIZE)"
 
+# Annotate VolumeSnapshotContent to allow volume mode change (Filesystem -> Block)
+# This is required by the external-provisioner when the PVC's volumeMode differs from the snapshot's source.
+# In Velero, the CSI Snapshot Exposer handles this annotation automatically.
+VSC_NAME=$(kubectl get volumesnapshot fs-snapshot-1 -n "$NAMESPACE" -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+echo "  Annotating VolumeSnapshotContent $VSC_NAME to allow volume mode change..."
+kubectl annotate volumesnapshotcontent "$VSC_NAME" \
+  snapshot.storage.kubernetes.io/allow-volume-mode-change="true"
+
 # Step 4: Create backupPVC in Block mode from filesystem snapshot
 # This is what Velero's CSI Snapshot Exposer does
 echo ""
