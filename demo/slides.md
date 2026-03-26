@@ -37,6 +37,69 @@ Welcome! This presentation demonstrates Changed Block Tracking (CBT) in Kubernet
 transition: slide-left
 ---
 
+# What is CBT?
+
+Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
+
+<div class="grid grid-cols-2 gap-8 mt-4">
+<div>
+
+<v-clicks>
+
+- **K8s 1.33** — Alpha (no feature gate)
+- **OCP 4.20** — DevPreviewNoUpgrade
+- **K8s 1.36** — Proposed Beta target
+- **OCP 5.0** — Expected K8s 1.36 beta
+
+</v-clicks>
+
+<v-click>
+<div class="mt-4 p-2 bg-yellow-900 bg-opacity-20 rounded text-sm">
+
+CBT operates on the **block device layer** — the source volume can use either Block or Filesystem mode
+
+</div>
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+```mermaid {scale:0.55}
+graph TB
+    PVC[PVC: Block Device]
+    S1[Snapshot 1<br/>100 blocks]
+    S2[Snapshot 2<br/>200 blocks]
+    CBT[CBT Engine]
+    S3[S3 Backup<br/>Delta Only]
+
+    PVC -->|Create| S1
+    PVC -->|Write +100 blocks| S2
+    S1 -->|Compare| CBT
+    S2 -->|Compare| CBT
+    CBT -->|~400KB delta| S3
+
+    style CBT fill:#f96,stroke:#333
+    style S3 fill:#9f6,stroke:#333
+```
+
+</v-click>
+
+</div>
+</div>
+
+<!--
+- Define CBT upfront so the audience has context for the history slides
+- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 DevPreviewNoUpgrade
+- Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
+- Note: CBT works at block layer regardless of volume mode (Filesystem or Block)
+-->
+
+---
+transition: slide-left
+---
+
 # The "Holy Grail" of Efficient Backups
 
 <div class="grid grid-cols-2 gap-4">
@@ -165,68 +228,6 @@ When a backup tool (like Velero) runs with CBT enabled:
 - Ceph is used as an example because it already has rbd diff
 - The standard (KEP-3314) makes this portable across CSI drivers
 - Any vendor can implement SnapshotMetadata gRPC service
--->
-
----
-transition: slide-left
----
-
-# What is CBT?
-
-Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have changed between snapshots, enabling efficient incremental backups.
-
-<div class="grid grid-cols-2 gap-8 mt-4">
-<div>
-
-<v-clicks>
-
-- **K8s 1.33** — Alpha (no feature gate)
-- **OCP 4.20** — DevPreviewNoUpgrade
-- **K8s 1.36** — Proposed Beta target
-- **OCP 5.0** — Expected K8s 1.36 beta
-
-</v-clicks>
-
-<v-click>
-<div class="mt-4 p-2 bg-yellow-900 bg-opacity-20 rounded text-sm">
-
-CBT is supported only for **block volumes**, not file volumes
-
-</div>
-</v-click>
-
-</div>
-<div>
-
-<v-click>
-
-```mermaid {scale:0.55}
-graph TB
-    PVC[PVC: Block Device]
-    S1[Snapshot 1<br/>100 blocks]
-    S2[Snapshot 2<br/>200 blocks]
-    CBT[CBT Engine]
-    S3[S3 Backup<br/>Delta Only]
-
-    PVC -->|Create| S1
-    PVC -->|Write +100 blocks| S2
-    S1 -->|Compare| CBT
-    S2 -->|Compare| CBT
-    CBT -->|~400KB delta| S3
-
-    style CBT fill:#f96,stroke:#333
-    style S3 fill:#9f6,stroke:#333
-```
-
-</v-click>
-
-</div>
-</div>
-
-<!--
-- KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 DevPreviewNoUpgrade
-- Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
-- Note the block volume requirement - this is critical!
 -->
 
 ---
@@ -456,111 +457,45 @@ Demo components walkthrough:
 layout: default
 ---
 
-# Demo Workflow — Phase 1: Setup
+# Phase 1: Setup & Deploy
 
-<v-clicks>
+<v-clicks depth="2">
 
-- **Deploy Kubernetes Cluster** — Minikube with vfkit (4 CPUs, 8GB RAM)
-- **Install Snapshot CRDs** — VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass
-- **Deploy CSI Driver with CBT**
+1. **Deploy Kubernetes Cluster** — Minikube with vfkit (4 CPUs, 8GB RAM)
+2. **Install Snapshot CRDs** — VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass
+3. **Deploy CSI Driver with CBT**
+   ```bash
+   ./scripts/01-deploy-csi-driver.sh
+   # Installs SnapshotMetadataService CRD + enables CBT API
+   ```
+4. **Deploy MinIO S3 Storage** — `./scripts/02-deploy-minio.sh`
+5. **Deploy Block Writer** — `./scripts/03-deploy-workload.sh`
+   - Creates block PVC, writes 100 blocks to raw device
 
 </v-clicks>
 
 <v-click>
 
-```bash
-./scripts/01-deploy-csi-driver.sh
-# Installs SnapshotMetadataService CRD + enables CBT API
-```
+<div class="mt-4 p-2 bg-blue-900 bg-opacity-20 rounded text-sm">
+
+**snapshot-metadata-lister pod**: Bridges K8s RBAC and CSI driver access. Uses ServiceAccount tokens via TokenRequest API, translates snapshot names to CSI handles, connects to SnapshotMetadataService over TLS (port 6443).
+
+</div>
 
 </v-click>
 
 <!--
-Setup phase - emphasize automation:
+Setup and deployment combined into one slide:
 - Minikube is default, but supports any K8s cluster via KUBECONFIG
 - Snapshot CRDs must be installed BEFORE CSI driver
 - CSI driver deployment includes TLS cert generation and sidecar injection
-- Scripts handle all complexity automatically
+- snapshot-metadata-lister acts as authenticated client for CBT APIs
 - macOS: Use vfkit driver (not Podman) for block volume support
 -->
 
 ---
-layout: default
----
 
-# snapshot-metadata-lister Pod
-
-The **snapshot-metadata-lister** acts as an **authenticated client** to access CBT APIs:
-
-<v-clicks>
-
-- **Token Validation** — ServiceAccount tokens via TokenRequest API
-- **Name → Handle Translation** — VolumeSnapshot names to CSI handles
-- **gRPC Proxy** — TLS connection to SnapshotMetadataService (port 6443)
-
-</v-clicks>
-
-<v-click>
-
-```yaml
-# RBAC: ServiceAccount + Role for VolumeSnapshot access
-rules:
-- apiGroups: ["snapshot.storage.k8s.io"]
-  resources: ["volumesnapshots"]
-  verbs: ["get", "list"]
-```
-
-</v-click>
-
-<!--
-- This pod bridges Kubernetes RBAC and CSI driver access
-- Without it, users cannot directly call CBT APIs
-- Token validation ensures only authorized users access metadata
-- Name translation allows using friendly snapshot names instead of handles
-- TLS-secured gRPC connection to SnapshotMetadataService
-- Deployed in Phase 3 before calling GetMetadataAllocated
--->
-
----
-
-# Demo Workflow (cont.)
-
-<v-clicks depth="2">
-
-## Phase 2: Deploy Workload
-
-4. **Deploy MinIO S3 Storage**
-   ```bash
-   ./scripts/02-deploy-minio.sh
-   ```
-
-5. **Deploy Block Writer**
-   ```bash
-   ./scripts/03-deploy-workload.sh
-   ```
-   - Creates block device PVC
-   - Writes 100 blocks to raw device
-
-6. **Verify Setup**
-   ```bash
-   ./scripts/backup-status.sh
-   ./scripts/integrity-check.sh
-   ```
-
-</v-clicks>
-
-<!--
-Workload deployment:
-- MinIO provides S3-compatible storage (easier than real S3 for demos)
-- Block-writer uses volumeMode: Block - emphasize this requirement
-- Initial data: 100 blocks written to raw device /dev/xvda (~400KB)
-- Verification scripts ensure everything is working
-- This is the baseline for our CBT comparisons
--->
-
----
-
-# Phase 3: GetMetadataAllocated
+# Phase 2: GetMetadataAllocated
 
 <v-clicks>
 
@@ -581,62 +516,32 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 <v-click>
 
-Lists all **allocated blocks** in the snapshot
+**Real output** from CI:
 
-**Status**: API call completes successfully
+```text
+Discovered SnapshotMetadataService: address=csi-snapshot-metadata.default:6443
+Connected to CSI SnapshotMetadata service
+Getting allocated blocks...
+  Found 42 allocated blocks
+Total allocated size: 172032 bytes (0.16 MB)
+Volume size: 1073741824 bytes (1024.00 MB)
+Data transfer savings: 99.98%
+```
 
 </v-click>
 
 <!--
 - Snapshot creation is fast (~4 seconds)
-- snapshot-metadata-lister pod takes longer to start (62s) due to image pull
-- GetMetadataAllocated API call succeeds
-- CSI hostpath driver limitation: no actual metadata returned (but API works)
-- In production CSI drivers, this would return allocated blocks
+- Real CBT API output: 42 blocks of 4096 bytes = 172KB
+- Only ~0.02% of 1Gi volume is allocated
+- 99.98% data transfer savings
 -->
 
 ---
 layout: default
 ---
 
-# Phase 3: Actual CBT Output (Run #139)
-
-**Real output** from cbt-backup using GetMetadataAllocated API:
-
-```text {all}{maxHeight:'220px'}
-Discovered SnapshotMetadataService: address=csi-snapshot-metadata.default:6443
-Created SA token for gRPC authentication
-Connected to CSI SnapshotMetadata service
-Getting allocated blocks for block-writer-data-snapshot-1774398745...
-✓ Found 42 allocated blocks
-Total allocated size: 172032 bytes (0.16 MB)
-Volume size: 1073741824 bytes (1024.00 MB)
-Data transfer savings: 99.98%
-```
-
-<v-click>
-
-<div class="mt-3 p-3 bg-green-900 bg-opacity-20 rounded text-sm">
-
-**Sparse Region Detection** — Volume: 1 GB, Allocated: 172 KB (42 blocks), **Savings: 99.98%**
-
-Without CBT, backup tools transfer the entire 1 GB. With CBT, only 172 KB is transferred.
-
-</div>
-
-</v-click>
-
-<!--
-- Real CBT API output from CI run #139
-- 42 blocks of 4096 bytes = 172,032 bytes (~172KB)
-- Only ~0.02% of 1Gi volume is allocated
-- TLS-secured gRPC with SA token auth
-- Service discovered from SnapshotMetadataService CR
--->
-
----
-
-# Phase 4: GetMetadataDelta
+# Phase 3: GetMetadataDelta
 
 <v-clicks>
 
@@ -647,7 +552,7 @@ Without CBT, backup tools transfer the entire 1 GB. With CBT, only 172 KB is tra
 
 <v-click>
 
-```bash {all}{maxHeight:'180px'}
+```bash {all}{maxHeight:'150px'}
 # Get CSI snapshot handle from VolumeSnapshotContent
 VSC=$(kubectl get volumesnapshot block-snapshot-1 -n cbt-demo \
   -o jsonpath="{.status.boundVolumeSnapshotContentName}")
@@ -663,7 +568,11 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 <v-click>
 
-Reports only **changed blocks** using base snapshot CSI handle
+<div class="mt-3 p-3 bg-blue-900 bg-opacity-20 rounded text-sm">
+
+**PR #180: CSI Handle Support** (merged Oct 2025) — `GetMetadataDelta` accepts CSI snapshot handles instead of names. Base snapshot **can be deleted** after extracting handle. Backward compatible.
+
+</div>
 
 </v-click>
 
@@ -678,43 +587,7 @@ Reports only **changed blocks** using base snapshot CSI handle
 layout: default
 ---
 
-# Phase 4: Delta Output
-
-**GetMetadataDelta** identifies only blocks changed between snapshots:
-
-```text {all}{maxHeight:'200px'}
-# The sidecar API uses:
-#   base_snapshot_id  = CSI handle of first snapshot
-#   target_snapshot_name = name of second snapshot
-
-# Example delta output (cbt-backup incremental mode):
-Getting changed blocks between block-snapshot-1 and block-snapshot-2...
-✓ Found N changed blocks
-# Only the newly written blocks appear in the delta
-```
-
-<v-click>
-
-<div class="mt-3 p-3 bg-blue-900 bg-opacity-20 rounded text-sm">
-
-**PR #180: CSI Handle Support** (merged Oct 2025) — `GetMetadataDelta` accepts CSI snapshot handles instead of names. Base snapshot **can be deleted** after extracting handle. Backward compatible.
-
-</div>
-
-</v-click>
-
-<!--
-- Delta API uses CSI handle for base snapshot (from VolumeSnapshotContent)
-- Target snapshot specified by name (sidecar resolves it)
-- Only changed blocks between the two snapshots are returned
-- With PR #180, base snapshot handle can be used even if snapshot deleted
--->
-
----
-layout: default
----
-
-# Phase 4b: Filesystem-to-Block Volume Mode Conversion
+# Phase 4: Filesystem-to-Block Conversion
 
 **Velero Block Data Mover pattern**: backupPVC is always Block mode, regardless of source.
 
@@ -726,19 +599,12 @@ layout: default
 - **Source PVC**: `volumeMode: Filesystem`
   - Normal app writes files to `/data/`
 - **Snapshot**: Created from Filesystem PVC
+- **Annotate** VolumeSnapshotContent
 - **BackupPVC**: `volumeMode: Block`
   - Restored from snapshot with mode change
 - **CBT**: Works on block layer transparently
 
 </v-clicks>
-
-<v-click>
-
-```bash
-./scripts/demo-fs-to-block.sh
-```
-
-</v-click>
 
 </div>
 <div>
@@ -767,58 +633,23 @@ graph TB
 </div>
 </div>
 
-<!--
-- KEP-3314 Non-Goal: "The volume could be attached to a pod with either Block or Filesystem volume modes"
-- Velero's CSI Snapshot Exposer uses getVolumeModeByAccessMode() which returns Block for data mover
-- The annotation is the key: snapshot.storage.kubernetes.io/allow-volume-mode-change=true
-- Without it, external-provisioner rejects the volume mode change
-- In Velero, this annotation is added automatically by the CSI Snapshot Exposer
-- This validates the end-to-end flow from filesystem apps to block-level CBT backup
--->
-
----
-layout: default
----
-
-# Why the Annotation Matters
-
-The **volume mode change** from Filesystem to Block requires explicit permission:
-
-<v-clicks>
-
-- **Problem**: External-provisioner rejects PVC if `volumeMode` differs from snapshot source
-- **Error**: `"does not have permission... allow-volume-mode-change annotation is not present"`
-- **Solution**: Annotate `VolumeSnapshotContent` before creating backupPVC
-
-</v-clicks>
-
 <v-click>
 
-```bash
-# Required annotation on VolumeSnapshotContent
-kubectl annotate volumesnapshotcontent $VSC_NAME \
-  snapshot.storage.kubernetes.io/allow-volume-mode-change="true"
-```
+<div class="mt-2 p-2 bg-yellow-900 bg-opacity-20 rounded text-xs">
 
-</v-click>
-
-<v-click>
-
-<div class="mt-4 p-3 bg-yellow-900 bg-opacity-20 rounded text-sm">
-
-**In Velero**: The CSI Snapshot Exposer adds this annotation automatically when creating the backupPVC. Manual annotation is only needed for standalone usage outside Velero.
+**Key**: The `snapshot.storage.kubernetes.io/allow-volume-mode-change` annotation on VolumeSnapshotContent is required to change volume modes. Without it, the external-provisioner rejects the PVC. In Velero, the CSI Snapshot Exposer adds this annotation automatically.
 
 </div>
 
 </v-click>
 
 <!--
-- This is a security feature: prevents accidental volume mode changes
-- The annotation must be on the VolumeSnapshotContent (not VolumeSnapshot)
-- Velero handles this transparently in the CSI Snapshot Exposer
-- For this demo, we add it manually to simulate what Velero does
-- This came from real CI failure - the annotation was missing and PVC binding timed out
-- Important for anyone building their own CBT tooling outside Velero
+- KEP-3314 Non-Goal: "The volume could be attached to a pod with either Block or Filesystem volume modes"
+- Velero's CSI Snapshot Exposer uses getVolumeModeByAccessMode() which returns Block for data mover
+- The annotation is a security feature: prevents accidental volume mode changes
+- This came from a real CI failure - discovered the annotation requirement through iteration
+- Important for anyone building CBT tooling outside Velero
+- Validates the complete flow from filesystem apps to block-level CBT backup
 -->
 
 ---
@@ -848,9 +679,9 @@ layout: default
 
 <!--
 - Demonstrates end-to-end disaster recovery using snapshots
-- Step 13: Simulate disaster by deleting workload but preserving snapshots
-- Step 14: Restore creates PVC from snapshot (native K8s restore)
-- Step 15: Verify ensures data integrity with checksum comparison
+- Simulate disaster by deleting workload but preserving snapshots
+- Restore creates PVC from snapshot (native K8s restore)
+- Verify ensures data integrity with checksum comparison
 - Snapshots provide crash-consistent recovery points
 -->
 
@@ -866,7 +697,7 @@ layout: two-cols
 
 ## Backup Tool (cbt-backup)
 
-**Built in CI** (build-backup-tool job → artifact):
+**Built in CI** (build-backup-tool job):
 
 ```bash
 cd tools/cbt-backup
@@ -992,9 +823,7 @@ layout: default
 
 # CI/CD Pipeline
 
-**Latest Successful Run**: [#139 (23518666100)](https://github.com/kaovilai/k8s-cbt-s3mover-demo/actions/runs/23518666100)
 **Total Time**: ~13 minutes (jobs run in parallel)
-**Commit**: feat: switch to external-snapshot-metadata sidecar API for CBT
 
 <div grid="~ cols-4 gap-4">
 <div>
@@ -1003,10 +832,11 @@ layout: default
 
 ## demo
 
-**End-to-end test** (**11m 43s**)
+**End-to-end test** (~12m)
 - Setup cluster
 - Deploy CSI + CBT
 - CBT backup (42 blocks)
+- FS-to-Block conversion
 - Verifier + restore
 - **Result**: ✓ Success
 
@@ -1019,7 +849,7 @@ layout: default
 
 ## build-backup-tool
 
-**Build & test** (**1m 21s**)
+**Build & test** (~1m 20s)
 - Go 1.25
 - Download deps
 - Build binary
@@ -1035,7 +865,7 @@ layout: default
 
 ## lint
 
-**Code quality** (**1m 14s**)
+**Code quality** (~1m 15s)
 - shellcheck scripts
 - go fmt
 - go vet
@@ -1050,7 +880,7 @@ layout: default
 
 ## build-restore-tool
 
-**Build & artifact** (**40s**)
+**Build & artifact** (~40s)
 - Build binary
 - Upload artifact
 - Used by demo job
@@ -1065,17 +895,16 @@ layout: default
 CI/CD automation highlights:
 - 4 parallel jobs: demo (end-to-end), build-backup-tool, lint, build-restore-tool
 - Total time: ~13 minutes for full validation including in-cluster backup/restore
-- Demo job: setup, deploy, snapshot, CBT APIs, verifier, in-cluster backup + restore
+- Demo job now includes filesystem-to-block conversion test
 - CBT backup uses real GetMetadataAllocated API (42 blocks, 172KB, 99.98% savings)
 - Runs on every push/PR to main/develop branches
-- This ensures reproducibility and catches regressions
 -->
 
 ---
 layout: default
 ---
 
-# CI Results (Run #139)
+# CI Results
 
 <div class="text-sm">
 
@@ -1095,6 +924,7 @@ layout: default
 | GetMetadataAllocated | 42 blocks (172KB) |
 | Verifier (allocated) | ✓ Pass |
 | Negative test | ✓ Mismatch detected |
+| FS-to-Block conversion | ✓ Pass |
 | In-cluster backup | ✓ CBT Enabled: true |
 
 </v-click>
@@ -1128,8 +958,8 @@ layout: default
 - 99.98% data transfer savings (172KB from 1GB volume)
 - Upstream verifier confirms metadata matches device contents
 - Negative test correctly detects data mismatch
+- FS-to-Block conversion validates Velero Block Data Mover pattern
 - In-cluster backup/restore jobs follow Velero pattern
-- TLS-secured gRPC with SA token auth
 -->
 
 ---
@@ -1160,13 +990,14 @@ CBT enables <strong>99.98% reduction</strong> in backup data transfer
 </v-clicks>
 
 <!--
-Summary of achievements from CI run #139:
-- ✅ Real CBT: GetMetadataAllocated found 42 blocks (not a simulation)
-- ✅ 172KB from 1GB = 99.98% savings
-- ✅ In-cluster Jobs mount block PVCs and upload to S3
-- ✅ TLS-secured gRPC with SA token from SnapshotMetadataService CR
-- ✅ Upstream snapshot-metadata-verifier validates correctness
-- ✅ Block data uploaded to MinIO S3 and restored successfully
+Summary of achievements:
+- Real CBT: GetMetadataAllocated found 42 blocks (not a simulation)
+- 172KB from 1GB = 99.98% savings
+- In-cluster Jobs mount block PVCs and upload to S3
+- TLS-secured gRPC with SA token from SnapshotMetadataService CR
+- Upstream snapshot-metadata-verifier validates correctness
+- Block data uploaded to MinIO S3 and restored successfully
+- FS-to-Block validates the Velero Block Data Mover design
 -->
 
 ---
@@ -1232,7 +1063,7 @@ layout: default
 </v-click>
 
 <!--
-Status update from CI run #139:
+Status update:
 - LEFT: Everything that works end-to-end with real CBT data
 - RIGHT: Remaining items (mostly waiting on CSI driver vendors)
 - Key message: Demo is fully functional, not just infrastructure validation
