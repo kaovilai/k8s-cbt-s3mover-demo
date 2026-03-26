@@ -681,6 +681,25 @@ jobs:
           echo ""
           echo "GetMetadataDelta verification complete"
 
+      - name: Test Filesystem-to-Block Volume Mode Conversion
+        run: |
+          echo "=========================================="
+          echo "Testing Filesystem-to-Block Volume Mode Conversion"
+          echo "=========================================="
+          echo ""
+          echo "This validates the Velero Block Data Mover pattern:"
+          echo "  Source PVC (Filesystem) -> Snapshot -> BackupPVC (Block) -> CBT"
+          echo ""
+          ./scripts/demo-fs-to-block.sh
+
+      - name: Cleanup fs-to-block resources
+        if: always()
+        run: |
+          echo "Cleaning up fs-to-block demo resources..."
+          kubectl delete pod fs-writer fs-backup-reader -n cbt-demo --ignore-not-found=true || true
+          kubectl delete pvc fs-writer-data fs-backup-block -n cbt-demo --ignore-not-found=true || true
+          kubectl delete volumesnapshot fs-snapshot-1 fs-snapshot-2 -n cbt-demo --ignore-not-found=true || true
+
       - name: Test Restore Dry Run
         run: |
           echo "Testing restore dry run..."

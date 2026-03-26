@@ -16,7 +16,9 @@ echo "Velero's CSI Snapshot Exposer always creates the backupPVC in Block"
 echo "mode regardless of the source PVC's volume mode, because CBT operates"
 echo "on the underlying block device."
 echo ""
-read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+if [ -t 0 ]; then
+    read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=detect-storage.sh
