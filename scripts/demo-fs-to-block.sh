@@ -186,8 +186,8 @@ echo ""
 echo "  Block device info:"
 kubectl exec -n "$NAMESPACE" fs-backup-reader -- ls -la /dev/xvdb
 echo ""
-echo "  Reading raw block data (first 512 bytes):"
-kubectl exec -n "$NAMESPACE" fs-backup-reader -- dd if=/dev/xvdb bs=512 count=1 2>/dev/null | kubectl exec -i -n "$NAMESPACE" fs-backup-reader -- od -A x -t x1z -v | head -5
+echo "  Reading raw block data (first 512 bytes hex dump):"
+kubectl exec -n "$NAMESPACE" fs-backup-reader -- sh -c 'dd if=/dev/xvdb bs=512 count=1 2>/dev/null | od -A x -t x1 -v' | head -5
 
 # Step 6: Run CBT against the snapshot
 echo ""
