@@ -714,6 +714,117 @@ Getting changed blocks between block-snapshot-1 and block-snapshot-2...
 layout: default
 ---
 
+# Phase 4b: Filesystem-to-Block Volume Mode Conversion
+
+**Velero Block Data Mover pattern**: backupPVC is always Block mode, regardless of source.
+
+<div class="grid grid-cols-2 gap-6">
+<div>
+
+<v-clicks>
+
+- **Source PVC**: `volumeMode: Filesystem`
+  - Normal app writes files to `/data/`
+- **Snapshot**: Created from Filesystem PVC
+- **BackupPVC**: `volumeMode: Block`
+  - Restored from snapshot with mode change
+- **CBT**: Works on block layer transparently
+
+</v-clicks>
+
+<v-click>
+
+```bash
+./scripts/demo-fs-to-block.sh
+```
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+```mermaid {scale:0.5}
+graph TB
+    FS[Filesystem PVC<br/>volumeMounts: /data]
+    SNAP[VolumeSnapshot<br/>fs-snapshot-1]
+    ANN["Annotate VSC<br/>allow-volume-mode-change"]
+    BLK[Block PVC<br/>volumeDevices: /dev/xvdb]
+    CBT[CBT API<br/>GetMetadataAllocated]
+
+    FS -->|snapshot| SNAP
+    SNAP --> ANN
+    ANN -->|restore as Block| BLK
+    SNAP -->|metadata| CBT
+
+    style ANN fill:#f96,stroke:#333
+    style CBT fill:#9f6,stroke:#333
+```
+
+</v-click>
+
+</div>
+</div>
+
+<!--
+- KEP-3314 Non-Goal: "The volume could be attached to a pod with either Block or Filesystem volume modes"
+- Velero's CSI Snapshot Exposer uses getVolumeModeByAccessMode() which returns Block for data mover
+- The annotation is the key: snapshot.storage.kubernetes.io/allow-volume-mode-change=true
+- Without it, external-provisioner rejects the volume mode change
+- In Velero, this annotation is added automatically by the CSI Snapshot Exposer
+- This validates the end-to-end flow from filesystem apps to block-level CBT backup
+-->
+
+---
+layout: default
+---
+
+# Why the Annotation Matters
+
+The **volume mode change** from Filesystem to Block requires explicit permission:
+
+<v-clicks>
+
+- **Problem**: External-provisioner rejects PVC if `volumeMode` differs from snapshot source
+- **Error**: `"does not have permission... allow-volume-mode-change annotation is not present"`
+- **Solution**: Annotate `VolumeSnapshotContent` before creating backupPVC
+
+</v-clicks>
+
+<v-click>
+
+```bash
+# Required annotation on VolumeSnapshotContent
+kubectl annotate volumesnapshotcontent $VSC_NAME \
+  snapshot.storage.kubernetes.io/allow-volume-mode-change="true"
+```
+
+</v-click>
+
+<v-click>
+
+<div class="mt-4 p-3 bg-yellow-900 bg-opacity-20 rounded text-sm">
+
+**In Velero**: The CSI Snapshot Exposer adds this annotation automatically when creating the backupPVC. Manual annotation is only needed for standalone usage outside Velero.
+
+</div>
+
+</v-click>
+
+<!--
+- This is a security feature: prevents accidental volume mode changes
+- The annotation must be on the VolumeSnapshotContent (not VolumeSnapshot)
+- Velero handles this transparently in the CSI Snapshot Exposer
+- For this demo, we add it manually to simulate what Velero does
+- This came from real CI failure - the annotation was missing and PVC binding timed out
+- Important for anyone building their own CBT tooling outside Velero
+-->
+
+---
+layout: default
+---
+
 # Phase 5: Disaster Recovery
 
 <v-clicks>
@@ -1038,6 +1149,7 @@ class: text-center
 4. ✅ **TLS + SA token auth** — Secure gRPC to SnapshotMetadata sidecar
 5. ✅ **Upstream verifier** — Confirms metadata matches actual device contents
 6. ✅ **Block data to S3** — Full backup with MinIO integration
+7. ✅ **Filesystem → Block conversion** — Velero Block Data Mover pattern validated
 
 ## Key Takeaway
 
@@ -1080,6 +1192,7 @@ layout: default
 - cbt-backup Job: CBT → read blocks → S3
 - cbt-restore Job: S3 → write blocks → device
 - TLS + SA token gRPC auth
+- Filesystem → Block volume mode conversion
 - Service discovery from SnapshotMetadataService CR
 
 </v-click>
