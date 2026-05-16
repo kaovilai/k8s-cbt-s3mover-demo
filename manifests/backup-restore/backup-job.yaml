@@ -20,10 +20,21 @@ spec:
         - --namespace=cbt-demo
         - --device=/dev/xvda
         - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
-        - --s3-access-key=minioadmin
-        - --s3-secret-key=minioadmin123
+        - --s3-access-key=$(S3_ACCESS_KEY)
+        - --s3-secret-key=$(S3_SECRET_KEY)
         - --s3-bucket=snapshots
         - --service-account=cbt-backup-sa
+        env:
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: root-user
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-credentials
+              key: root-password
         volumeDevices:
         - name: data-volume
           devicePath: /dev/xvda
