@@ -74,8 +74,8 @@ function create_or_delete_snapshot_controller() {
     temp_rbac=${TEMP_DIR}/snapshot-rbac.yaml
     temp_snap_controller=${TEMP_DIR}/snapshot-controller.yaml
 
-    curl -o "${temp_rbac}" "${SNAPSHOT_RBAC}"
-    curl -o "${temp_snap_controller}" "${SNAPSHOT_CONTROLLER}"
+    curl --fail --location --retry 3 -o "${temp_rbac}" "${SNAPSHOT_RBAC}"
+    curl --fail --location --retry 3 -o "${temp_snap_controller}" "${SNAPSHOT_CONTROLLER}"
     sed -i "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_rbac}"
     sed -i "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_snap_controller}"
     sed -i -E "s/(image: registry\.k8s\.io\/sig-storage\/snapshot-controller:).*$/\1$SNAPSHOT_VERSION/g" "${temp_snap_controller}"
