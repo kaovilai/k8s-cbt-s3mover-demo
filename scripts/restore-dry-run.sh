@@ -5,6 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
+# Check required tools
+for tool in kubectl jq; do
+    if ! command -v "$tool" &>/dev/null; then
+        echo "Error: '$tool' is required but not found in PATH"
+        exit 1
+    fi
+done
+
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-}"
 
