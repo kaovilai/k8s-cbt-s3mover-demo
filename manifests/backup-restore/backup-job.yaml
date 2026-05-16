@@ -5,6 +5,7 @@ metadata:
   namespace: cbt-demo
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 600
   template:
     spec:
       serviceAccountName: cbt-backup-sa
