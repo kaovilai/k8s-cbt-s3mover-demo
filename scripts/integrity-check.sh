@@ -149,9 +149,11 @@ if kubectl get pod -n cbt-demo -l app=minio &> /dev/null; then
     MINIO_POD=$(kubectl get pod -n cbt-demo -l app=minio -o jsonpath='{.items[0].metadata.name}')
 
     if [ -n "$MINIO_POD" ]; then
+        MINIO_USER=$(kubectl get secret minio-credentials -n cbt-demo -o jsonpath='{.data.root-user}' | base64 -d)
+        MINIO_PASS=$(kubectl get secret minio-credentials -n cbt-demo -o jsonpath='{.data.root-password}' | base64 -d)
         echo "Checking S3 backup files..."
         kubectl exec -n cbt-demo "$MINIO_POD" -- sh -c "
-            mc alias set local http://localhost:9000 minioadmin minioadmin123 2>/dev/null
+            mc alias set local http://localhost:9000 '${MINIO_USER}' '${MINIO_PASS}' 2>/dev/null
 
             # Check if bucket exists
             if mc ls local/snapshots/ &>/dev/null; then
