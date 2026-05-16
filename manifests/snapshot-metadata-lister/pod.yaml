@@ -16,6 +16,13 @@ spec:
       git clone https://github.com/kubernetes-csi/external-snapshot-metadata.git /tmp/repo
       cd /tmp/repo/tools/snapshot-metadata-lister
       CGO_ENABLED=0 go build -o /output/snapshot-metadata-lister .
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1000m"
     volumeMounts:
     - name: shared-volume
       mountPath: /output
@@ -26,6 +33,13 @@ spec:
     - /bin/sh
     - -c
     - "tail -f /dev/null"
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
     volumeMounts:
     - name: shared-volume
       mountPath: /tools
