@@ -86,7 +86,7 @@ metadata:
 spec:
   containers:
   - name: writer
-    image: busybox:1.36
+    image: busybox:1.37.0
     command: ['sh', '-c', 'while true; do sleep 3600; done']
     securityContext:
       privileged: true
