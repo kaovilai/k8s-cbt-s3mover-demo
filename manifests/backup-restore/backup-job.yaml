@@ -38,6 +38,13 @@ spec:
         volumeDevices:
         - name: data-volume
           devicePath: /dev/xvda
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         securityContext:
           privileged: true
       volumes:
