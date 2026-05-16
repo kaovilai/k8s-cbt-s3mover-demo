@@ -5,8 +5,10 @@ metadata:
   namespace: cbt-demo
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 600
   template:
     spec:
+      automountServiceAccountToken: false
       restartPolicy: Never
       containers:
       - name: list
