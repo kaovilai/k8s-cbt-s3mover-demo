@@ -57,13 +57,16 @@ echo ""
 # 3. Kubernetes API for snapshot access
 #
 # For this demo, we'll run it with available credentials
+MINIO_ACCESS_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-user}' | base64 -d)
+MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-password}' | base64 -d)
+
 ./tools/cbt-backup/cbt-backup create \
     --namespace "$NAMESPACE" \
     --pvc "$PVC_NAME" \
     --snapshot "$SNAPSHOT_NAME" \
     --s3-endpoint "minio.cbt-demo.svc.cluster.local:9000" \
-    --s3-access-key "minioadmin" \
-    --s3-secret-key "minioadmin123" \
+    --s3-access-key "${MINIO_ACCESS_KEY}" \
+    --s3-secret-key "${MINIO_SECRET_KEY}" \
     --s3-bucket "snapshots" \
     --snapshot-class "$SNAPSHOT_CLASS" || {
     EXIT_CODE=$?
