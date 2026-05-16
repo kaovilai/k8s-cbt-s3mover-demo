@@ -179,13 +179,13 @@ fi
 # Step 6: Deploy workload
 echo ""
 echo "=========================================="
-echo "Step 6: Deploying PostgreSQL Workload"
+echo "Step 6: Deploying Block-Writer Workload"
 echo "=========================================="
 
 if ./scripts/03-deploy-workload.sh; then
-    echo -e "${GREEN}✓ PostgreSQL deployed${NC}"
+    echo -e "${GREEN}✓ Block-writer deployed${NC}"
 else
-    echo -e "${RED}✗ PostgreSQL deployment failed${NC}"
+    echo -e "${RED}✗ Block-writer deployment failed${NC}"
     exit 1
 fi
 
@@ -223,7 +223,7 @@ echo "    Credentials: minioadmin / minioadmin123"
 echo ""
 echo "Resources created:"
 echo "  • Namespace: cbt-demo"
-echo "  • PostgreSQL with data"
+echo "  • Block-writer with data"
 echo "  • 3 VolumeSnapshots"
 echo ""
 echo "Next steps:"

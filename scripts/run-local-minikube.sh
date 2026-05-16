@@ -332,13 +332,13 @@ fi
 # Step 7: Deploy workload
 echo ""
 echo "=========================================="
-echo "Step 7: Deploying PostgreSQL Workload"
+echo "Step 7: Deploying Block-Writer Workload"
 echo "=========================================="
 
 if ./scripts/03-deploy-workload.sh; then
-    echo -e "${GREEN}✓ PostgreSQL deployed${NC}"
+    echo -e "${GREEN}✓ Block-writer deployed${NC}"
 else
-    echo -e "${RED}✗ PostgreSQL deployment failed${NC}"
+    echo -e "${RED}✗ Block-writer deployment failed${NC}"
     exit 1
 fi
 
@@ -372,7 +372,7 @@ echo ""
 echo "Cluster:"
 echo "  • Minikube profile: cbt-demo"
 echo "  • Kubernetes: v1.34.0 (CBT alpha enabled)"
-echo "  • Driver: docker (VM-based)"
+echo "  • Driver: $DRIVER"
 echo "  • Context: cbt-demo"
 echo ""
 echo "Services:"
@@ -382,7 +382,7 @@ echo "  • Or use port-forward: kubectl port-forward -n cbt-demo svc/minio 9001
 echo ""
 echo "Resources created:"
 echo "  • Namespace: cbt-demo"
-echo "  • PostgreSQL with data"
+echo "  • Block-writer with data"
 echo "  • 3 VolumeSnapshots"
 echo ""
 echo "Next steps:"
