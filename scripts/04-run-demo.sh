@@ -14,7 +14,9 @@ echo "5. Write more data (1.2MB)"
 echo "6. Create third snapshot (incremental backup)"
 echo "7. Verify all snapshots"
 echo ""
-read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+if [ "${NON_INTERACTIVE:-false}" = "false" ]; then
+    read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=detect-storage.sh

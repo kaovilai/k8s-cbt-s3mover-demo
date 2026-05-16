@@ -351,7 +351,7 @@ echo ""
 echo "This will create snapshots and demonstrate CBT..."
 echo ""
 
-if ./scripts/04-run-demo.sh; then
+if NON_INTERACTIVE=$NON_INTERACTIVE ./scripts/04-run-demo.sh; then
     echo -e "${GREEN}✓ Demo workflow completed${NC}"
 else
     echo -e "${RED}✗ Demo workflow failed${NC}"
