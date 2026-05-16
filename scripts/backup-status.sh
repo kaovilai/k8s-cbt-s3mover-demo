@@ -1,6 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
+# Check required tools
+for tool in kubectl; do
+    if ! command -v "$tool" &>/dev/null; then
+        echo "Error: '$tool' is required but not found in PATH"
+        exit 1
+    fi
+done
+
 NAMESPACE="${1:-cbt-demo}"
 
 echo "=========================================="
