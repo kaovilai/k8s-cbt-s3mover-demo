@@ -1,5 +1,6 @@
 #!/bin/bash
 # Detect storage and snapshot classes for the CBT demo.
+# shellcheck disable=SC2034  # Variables are used by callers that source this file
 # Sources environment variables STORAGE_CLASS and SNAPSHOT_CLASS.
 #
 # Priority:

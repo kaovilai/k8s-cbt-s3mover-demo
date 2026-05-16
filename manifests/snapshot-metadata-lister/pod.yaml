@@ -3,7 +3,10 @@ kind: Pod
 metadata:
   name: csi-client
   namespace: cbt-demo
+  labels:
+    app: csi-client
 spec:
+  restartPolicy: Never
   serviceAccountName: csi-client-sa
   initContainers:
   - name: install-client
