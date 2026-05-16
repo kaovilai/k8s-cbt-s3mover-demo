@@ -3,7 +3,10 @@ kind: Pod
 metadata:
   name: cbt-verifier
   namespace: cbt-demo
+  labels:
+    app: cbt-verifier
 spec:
+  restartPolicy: Never
   serviceAccountName: csi-client-sa
   initContainers:
   - name: install-tools
