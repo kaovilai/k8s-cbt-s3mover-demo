@@ -20,7 +20,7 @@
 # Then add the "gnubin" directory to your PATH in your shell rc file:
 #   PATH="$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:$PATH"
 
-set -e
+set -euo pipefail
 set -x
 
 # Check for GNU sed on macOS
