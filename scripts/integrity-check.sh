@@ -115,7 +115,7 @@ echo "=========================================="
 echo ""
 
 if kubectl get volumesnapshot -n "$NAMESPACE" &> /dev/null; then
-    SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers | wc -l)
+    SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers | wc -l | tr -d '[:space:]')
 
     if [ "$SNAPSHOT_COUNT" -gt 0 ]; then
         echo "Found $SNAPSHOT_COUNT snapshot(s)"

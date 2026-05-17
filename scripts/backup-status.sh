@@ -24,7 +24,7 @@ SOURCE:.spec.source.persistentVolumeClaimName,\
 SIZE:.status.restoreSize,\
 AGE:.metadata.creationTimestamp
     echo ""
-    SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers | wc -l)
+    SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers | wc -l | tr -d '[:space:]')
     echo "Total snapshots: $SNAPSHOT_COUNT"
 else
     echo "No VolumeSnapshots found in namespace '$NAMESPACE'"
