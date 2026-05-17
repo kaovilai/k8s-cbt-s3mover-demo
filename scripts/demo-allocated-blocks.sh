@@ -13,6 +13,9 @@ for tool in kubectl jq go; do
     fi
 done
 
+# Portable base64 decode: macOS uses -D, Linux uses -d
+_base64_decode() { base64 -d 2>/dev/null || base64 -D; }
+
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-block-snapshot-1}"
 PVC_NAME="${3:-}"
@@ -65,8 +68,8 @@ echo ""
 # 3. Kubernetes API for snapshot access
 #
 # For this demo, we'll run it with available credentials
-MINIO_ACCESS_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-user}' | base64 -d)
-MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-password}' | base64 -d)
+MINIO_ACCESS_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-user}' | _base64_decode)
+MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-password}' | _base64_decode)
 
 ./tools/cbt-backup/cbt-backup create \
     --namespace "$NAMESPACE" \

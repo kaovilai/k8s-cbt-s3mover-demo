@@ -7,6 +7,9 @@ if ! command -v kubectl &>/dev/null; then
     exit 1
 fi
 
+# Portable base64 decode: macOS uses -D, Linux uses -d
+_base64_decode() { base64 -d 2>/dev/null || base64 -D; }
+
 NAMESPACE="${1:-cbt-demo}"
 
 echo "=========================================="
@@ -54,8 +57,8 @@ if kubectl get pod -n "$NAMESPACE" -l app=minio &> /dev/null; then
 
     # Use kubectl exec to check bucket contents
     MINIO_POD=$(kubectl get pod -n "$NAMESPACE" -l app=minio -o jsonpath='{.items[0].metadata.name}')
-    MINIO_USER=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-user}' | base64 -d)
-    MINIO_PASS=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-password}' | base64 -d)
+    MINIO_USER=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-user}' | _base64_decode)
+    MINIO_PASS=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-password}' | _base64_decode)
     echo ""
     echo "Attempting to check S3 bucket contents..."
     kubectl exec -n "$NAMESPACE" "$MINIO_POD" -- sh -c "

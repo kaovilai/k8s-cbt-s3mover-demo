@@ -92,7 +92,7 @@ echo "✓ TLS secret created: $SECRET_NAME"
 # Step 7: Encode CA certificate for SnapshotMetadataService CR
 echo ""
 echo "Encoding CA certificate for SnapshotMetadataService..."
-CA_CERT_BASE64=$(base64 -i ca-cert.pem | tr -d '\n')
+CA_CERT_BASE64=$(base64 < ca-cert.pem | tr -d '\n')
 
 # Step 8: Update the SnapshotMetadataService manifest
 MANIFEST_FILE="$(dirname "$0")/../manifests/csi-driver/testdata/snapshotmetadataservice.yaml"
