@@ -12,9 +12,14 @@ permissions:
   actions: read
 tools:
   edit:
-  bash: ["git log", "git diff", "git status", "find", "grep", "cat", "ls", "wc", "head", "tail"]
+  bash: ["go build ./...", "go vet ./...", "go test ./...", "bash -n", "git log", "git diff", "git status", "find", "grep", "cat", "ls", "wc", "head", "tail"]
   github:
     toolsets: [repos, issues, pull_requests]
+network:
+  allowed:
+    - defaults
+    - go
+    - github
 safe-outputs:
   create-pull-request:
     max: 1
