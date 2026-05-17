@@ -100,8 +100,7 @@ if [ -f "$MANIFEST_FILE" ]; then
     echo "Updating $MANIFEST_FILE with generated CA certificate..."
 
     # Replace any existing caCert value (placeholder or previous cert) with the newly generated one
-    # Note: GNU sed (required on macOS) uses -i without backup suffix
-    sed -i "s|caCert: .*|caCert: $CA_CERT_BASE64|g" "$MANIFEST_FILE"
+    sed -i.bak "s|caCert: .*|caCert: $CA_CERT_BASE64|g" "$MANIFEST_FILE" && rm -f "${MANIFEST_FILE}.bak"
 
     echo "✓ SnapshotMetadataService manifest updated"
 else

@@ -14,29 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Note: This script requires GNU sed on macOS. Install via Homebrew:
-#   brew install gnu-sed
-#
-# Then add the "gnubin" directory to your PATH in your shell rc file:
-#   PATH="$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:$PATH"
-
 set -euo pipefail
 set -x
-
-# Check for GNU sed on macOS
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    if ! sed --version 2>/dev/null | grep -q "GNU sed"; then
-        echo "Error: GNU sed is required on macOS but not found in PATH"
-        echo ""
-        echo "Install GNU sed with Homebrew:"
-        echo "  brew install gnu-sed"
-        echo ""
-        echo "Then add to your PATH in ~/.bashrc or ~/.zshrc:"
-        echo "  PATH=\"\$HOMEBREW_PREFIX/opt/gnu-sed/libexec/gnubin:\$PATH\""
-        echo ""
-        exit 1
-    fi
-fi
 
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -77,9 +56,9 @@ function create_or_delete_snapshot_controller() {
 
     curl --fail --location --retry 3 -o "${temp_rbac}" "${SNAPSHOT_RBAC}"
     curl --fail --location --retry 3 -o "${temp_snap_controller}" "${SNAPSHOT_CONTROLLER}"
-    sed -i "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_rbac}"
-    sed -i "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_snap_controller}"
-    sed -i -E "s/(image: registry\.k8s\.io\/sig-storage\/snapshot-controller:).*$/\1$SNAPSHOT_VERSION/g" "${temp_snap_controller}"
+    sed -i.bak "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_rbac}" && rm -f "${temp_rbac}.bak"
+    sed -i.bak "s/namespace: kube-system/namespace: ${NAMESPACE}/g" "${temp_snap_controller}" && rm -f "${temp_snap_controller}.bak"
+    sed -i.bak -E "s/(image: registry\.k8s\.io\/sig-storage\/snapshot-controller:).*$/\1$SNAPSHOT_VERSION/g" "${temp_snap_controller}" && rm -f "${temp_snap_controller}.bak"
 
     if [ "${action}" == "create" ]; then
         # Use apply for idempotent operations
