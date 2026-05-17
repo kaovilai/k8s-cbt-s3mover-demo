@@ -39,7 +39,9 @@ if [ "$SNAPSHOT_READY" != "true" ]; then
     exit 1
 fi
 
-read -r -p "Press Enter to continue with restore..."
+if [ "${NON_INTERACTIVE:-false}" = "false" ]; then
+    read -r -p "Press Enter to continue with restore..."
+fi
 
 # Step 1: Create PVC from snapshot
 echo ""

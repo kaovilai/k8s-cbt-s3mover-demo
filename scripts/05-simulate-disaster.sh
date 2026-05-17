@@ -17,7 +17,12 @@ echo "  - All data on the block device"
 echo ""
 echo "VolumeSnapshots will be PRESERVED for restore."
 echo ""
-read -r -p "Are you sure you want to continue? (type 'yes' to proceed): " CONFIRM
+if [ "${NON_INTERACTIVE:-false}" = "true" ]; then
+    echo "Non-interactive mode: proceeding automatically."
+    CONFIRM="yes"
+else
+    read -r -p "Are you sure you want to continue? (type 'yes' to proceed): " CONFIRM
+fi
 
 if [ "$CONFIRM" != "yes" ]; then
     echo "Aborted."
