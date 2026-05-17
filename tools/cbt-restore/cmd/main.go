@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-restore/pkg/blocks"
@@ -373,7 +374,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	manifests := make(map[string]metadata.SnapshotManifest)
 	for _, obj := range objects {
-		if len(obj) > 14 && obj[len(obj)-14:] == "/manifest.json" {
+		if strings.HasSuffix(obj, "/manifest.json") {
 			var manifest metadata.SnapshotManifest
 			if err := s3Client.DownloadJSON(ctx, obj, &manifest); err != nil {
 				fmt.Printf("Warning: Failed to load %s: %v\n", obj, err)
