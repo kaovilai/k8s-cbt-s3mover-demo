@@ -5,6 +5,9 @@ metadata:
   namespace: cbt-demo
   labels:
     app: csi-client
+    app.kubernetes.io/name: snapshot-metadata-lister
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   restartPolicy: Never
   serviceAccountName: csi-client-sa

@@ -5,6 +5,9 @@ metadata:
   namespace: cbt-demo
   labels:
     app: block-writer
+    app.kubernetes.io/name: block-writer
+    app.kubernetes.io/component: workload
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   restartPolicy: Always
   automountServiceAccountToken: false
