@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-backup/pkg/blocks"
@@ -86,7 +88,8 @@ func addS3Flags(cmd *cobra.Command) {
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	startTime := time.Now()
 
 	fmt.Println("========================================")
@@ -362,7 +365,8 @@ func runBackup(cmd *cobra.Command, args []string) error {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	fmt.Println("========================================")
 	fmt.Println("Available Backups")
