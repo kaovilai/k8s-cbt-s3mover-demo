@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-backup/pkg/blocks"
@@ -51,11 +52,7 @@ Supports full and incremental backups with block data upload to S3.`,
 	backupCmd.Flags().StringVarP(&pvcName, "pvc", "p", "", "PVC name to backup (required)")
 	backupCmd.Flags().StringVarP(&snapshotName, "snapshot", "s", "", "Snapshot name (generated if not provided)")
 	backupCmd.Flags().StringVarP(&baseSnapshotName, "base-snapshot", "b", "", "Base snapshot for incremental backup")
-	backupCmd.Flags().StringVarP(&s3Endpoint, "s3-endpoint", "e", "minio.cbt-demo.svc.cluster.local:9000", "S3 endpoint")
-	backupCmd.Flags().StringVarP(&s3AccessKey, "s3-access-key", "a", "minioadmin", "S3 access key")
-	backupCmd.Flags().StringVarP(&s3SecretKey, "s3-secret-key", "k", "minioadmin123", "S3 secret key")
-	backupCmd.Flags().StringVarP(&s3Bucket, "s3-bucket", "B", "snapshots", "S3 bucket name")
-	backupCmd.Flags().BoolVar(&s3UseSSL, "s3-use-ssl", false, "Use SSL for S3")
+	addS3Flags(backupCmd)
 	backupCmd.Flags().StringVarP(&devicePath, "device", "d", "", "Block device path (auto-detected if not provided)")
 	backupCmd.Flags().Int64Var(&blockSize, "block-size", blocks.DefaultBlockSize, "Block size in bytes")
 	backupCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (uses in-cluster config if not provided)")
@@ -70,11 +67,7 @@ Supports full and incremental backups with block data upload to S3.`,
 		RunE:  runList,
 	}
 
-	listCmd.Flags().StringVarP(&s3Endpoint, "s3-endpoint", "e", "minio.cbt-demo.svc.cluster.local:9000", "S3 endpoint")
-	listCmd.Flags().StringVarP(&s3AccessKey, "s3-access-key", "a", "minioadmin", "S3 access key")
-	listCmd.Flags().StringVarP(&s3SecretKey, "s3-secret-key", "k", "minioadmin123", "S3 secret key")
-	listCmd.Flags().StringVarP(&s3Bucket, "s3-bucket", "B", "snapshots", "S3 bucket name")
-	listCmd.Flags().BoolVar(&s3UseSSL, "s3-use-ssl", false, "Use SSL for S3")
+	addS3Flags(listCmd)
 
 	rootCmd.AddCommand(backupCmd, listCmd)
 
@@ -82,6 +75,14 @@ Supports full and incremental backups with block data upload to S3.`,
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func addS3Flags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&s3Endpoint, "s3-endpoint", "e", "minio.cbt-demo.svc.cluster.local:9000", "S3 endpoint")
+	cmd.Flags().StringVarP(&s3AccessKey, "s3-access-key", "a", "minioadmin", "S3 access key")
+	cmd.Flags().StringVarP(&s3SecretKey, "s3-secret-key", "k", "minioadmin123", "S3 secret key")
+	cmd.Flags().StringVarP(&s3Bucket, "s3-bucket", "B", "snapshots", "S3 bucket name")
+	cmd.Flags().BoolVar(&s3UseSSL, "s3-use-ssl", false, "Use SSL for S3")
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
@@ -393,7 +394,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Filter manifest files and load them
 	manifests := make(map[string]metadata.SnapshotManifest)
 	for _, obj := range objects {
-		if len(obj) > 14 && obj[len(obj)-14:] == "/manifest.json" {
+		if strings.HasSuffix(obj, "/manifest.json") {
 			var manifest metadata.SnapshotManifest
 			if err := s3Client.DownloadJSON(ctx, obj, &manifest); err != nil {
 				fmt.Printf("Warning: Failed to load %s: %v\n", obj, err)
