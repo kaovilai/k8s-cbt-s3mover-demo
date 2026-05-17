@@ -21,6 +21,7 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -28,13 +29,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
-      - run: pwd
-      - run: ls -la
+
       - name: Setup @antfu/ni
         run: npm i -g @antfu/ni
-
-      - name: Install dependencies
-        run: npm install
 
       - name: Install dependencies
         run: nci
