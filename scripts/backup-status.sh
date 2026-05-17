@@ -48,17 +48,17 @@ echo "S3 Storage Status (MinIO)"
 echo "=========================================="
 
 # Try to connect to MinIO and get bucket info
-if kubectl get pod -n cbt-demo -l app=minio &> /dev/null; then
+if kubectl get pod -n "$NAMESPACE" -l app=minio &> /dev/null; then
     echo "MinIO pod status:"
-    kubectl get pod -n cbt-demo -l app=minio
+    kubectl get pod -n "$NAMESPACE" -l app=minio
 
     # Use kubectl exec to check bucket contents
-    MINIO_POD=$(kubectl get pod -n cbt-demo -l app=minio -o jsonpath='{.items[0].metadata.name}')
-    MINIO_USER=$(kubectl get secret minio-credentials -n cbt-demo -o jsonpath='{.data.root-user}' | base64 -d)
-    MINIO_PASS=$(kubectl get secret minio-credentials -n cbt-demo -o jsonpath='{.data.root-password}' | base64 -d)
+    MINIO_POD=$(kubectl get pod -n "$NAMESPACE" -l app=minio -o jsonpath='{.items[0].metadata.name}')
+    MINIO_USER=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-user}' | base64 -d)
+    MINIO_PASS=$(kubectl get secret minio-credentials -n "$NAMESPACE" -o jsonpath='{.data.root-password}' | base64 -d)
     echo ""
     echo "Attempting to check S3 bucket contents..."
-    kubectl exec -n cbt-demo "$MINIO_POD" -- sh -c "
+    kubectl exec -n "$NAMESPACE" "$MINIO_POD" -- sh -c "
         mc alias set local http://localhost:9000 '${MINIO_USER}' '${MINIO_PASS}' 2>/dev/null || true
         echo 'Buckets:'
         mc ls local/ 2>/dev/null || echo 'Cannot list buckets'
