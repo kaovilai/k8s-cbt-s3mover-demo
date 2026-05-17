@@ -16,7 +16,8 @@ echo "=========================================="
 NAMESPACE="default"
 SECRET_NAME="csi-snapshot-metadata-certs"
 SERVICE_NAME="csi-snapshot-metadata"
-CERT_DIR="/tmp/csi-certs-$$"
+CERT_DIR="$(mktemp -d /tmp/csi-certs-XXXXXX)"
+trap 'rm -rf "$CERT_DIR"' EXIT
 
 # Create temporary directory for certificates
 mkdir -p "$CERT_DIR"
@@ -129,6 +130,5 @@ echo "  1. Deploy the CSI driver with snapshot metadata sidecar"
 echo "  2. Apply the SnapshotMetadataService CR"
 echo "  3. Apply the snapshot metadata service"
 echo ""
-echo "Note: Certificates will be stored temporarily in $CERT_DIR"
-echo "      They will be removed when you restart your system."
+echo "Note: Certificate files in $CERT_DIR are automatically deleted on script exit."
 echo ""
