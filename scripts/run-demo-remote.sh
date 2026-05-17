@@ -28,18 +28,20 @@ echo ""
 read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 # shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
 # Step 1: Verify cluster
 echo ""
 echo "[Step 1/8] Verifying remote cluster..."
-./scripts/00-setup-remote-cluster.sh
+"$SCRIPT_DIR/00-setup-remote-cluster.sh"
 
 # Step 2: Deploy MinIO
 echo ""
 echo "[Step 2/8] Deploying MinIO S3 storage..."
-./scripts/02-deploy-minio.sh
+"$SCRIPT_DIR/02-deploy-minio.sh"
 
 # Step 3: Install Snapshot CRDs (if not already installed)
 echo ""
@@ -63,7 +65,7 @@ echo ""
 echo "[Step 4/8] Checking CSI Driver..."
 if [[ "$STORAGE_CLASS" == "csi-hostpath-sc" ]]; then
     echo "  No supported cluster CSI driver detected. Installing CSI hostpath driver..."
-    ./scripts/01-deploy-csi-driver.sh
+    "$SCRIPT_DIR/01-deploy-csi-driver.sh"
 else
     echo "  Using detected storage: $STORAGE_CLASS / $SNAPSHOT_CLASS"
     echo "  Skipping CSI hostpath driver installation"
@@ -72,7 +74,7 @@ fi
 # Step 5: Validate setup
 echo ""
 echo "[Step 5/8] Validating CBT setup..."
-./scripts/validate-cbt.sh || {
+"$SCRIPT_DIR/validate-cbt.sh" || {
     echo ""
     echo "⚠️  Warning: Validation had issues, but continuing..."
     echo "  This is expected if you're using your cluster's native CSI driver"
@@ -81,17 +83,17 @@ echo "[Step 5/8] Validating CBT setup..."
 # Step 6: Deploy block-writer workload
 echo ""
 echo "[Step 6/8] Deploying block-writer workload..."
-./scripts/03-deploy-workload.sh
+"$SCRIPT_DIR/03-deploy-workload.sh"
 
 # Step 7: Check backup status
 echo ""
 echo "[Step 7/8] Checking backup infrastructure..."
-./scripts/backup-status.sh || true
+"$SCRIPT_DIR/backup-status.sh" || true
 
 # Step 8: Run integrity check
 echo ""
 echo "[Step 8/8] Running integrity checks..."
-./scripts/integrity-check.sh || true
+"$SCRIPT_DIR/integrity-check.sh" || true
 
 echo ""
 echo "=========================================="
