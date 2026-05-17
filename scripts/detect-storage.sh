@@ -9,6 +9,7 @@
 #   3. CSI hostpath (demo driver)
 #
 # Usage: source scripts/detect-storage.sh
+set -euo pipefail
 
 _detect_storage_class() {
     if [ -n "${STORAGE_CLASS:-}" ]; then
