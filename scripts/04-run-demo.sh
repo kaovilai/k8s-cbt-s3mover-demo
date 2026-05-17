@@ -189,7 +189,17 @@ echo ""
 # Get CSI snapshot handle from VolumeSnapshotContent (PR #180)
 echo "Getting CSI snapshot handle for base snapshot..."
 VSC_NAME=$(kubectl get volumesnapshot block-snapshot-1 -n "$NAMESPACE" -o jsonpath="{.status.boundVolumeSnapshotContentName}")
+if [ -z "$VSC_NAME" ]; then
+  echo "✗ Error: Could not retrieve VolumeSnapshotContent name for block-snapshot-1"
+  echo "  Ensure the snapshot is ready: kubectl get volumesnapshot block-snapshot-1 -n $NAMESPACE"
+  exit 1
+fi
 SNAP_HANDLE=$(kubectl get volumesnapshotcontent "$VSC_NAME" -o jsonpath="{.status.snapshotHandle}")
+if [ -z "$SNAP_HANDLE" ]; then
+  echo "✗ Error: Could not retrieve CSI snapshot handle from VolumeSnapshotContent $VSC_NAME"
+  echo "  Ensure the snapshot content has a handle: kubectl get volumesnapshotcontent $VSC_NAME -o yaml"
+  exit 1
+fi
 
 echo "  VolumeSnapshotContent: $VSC_NAME"
 echo "  CSI Snapshot Handle: $SNAP_HANDLE"
