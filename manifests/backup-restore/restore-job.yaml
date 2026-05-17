@@ -3,11 +3,19 @@ kind: Job
 metadata:
   name: cbt-restore
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: cbt-restore
+    app.kubernetes.io/component: restore
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
   activeDeadlineSeconds: 600
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cbt-restore
+        app.kubernetes.io/component: restore
     spec:
       automountServiceAccountToken: false
       restartPolicy: Never
