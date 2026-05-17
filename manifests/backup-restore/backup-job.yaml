@@ -3,11 +3,19 @@ kind: Job
 metadata:
   name: cbt-backup
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: cbt-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   backoffLimit: 0
   ttlSecondsAfterFinished: 600
   activeDeadlineSeconds: 600
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cbt-backup
+        app.kubernetes.io/component: backup
     spec:
       serviceAccountName: cbt-backup-sa
       restartPolicy: Never
