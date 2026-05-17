@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 # Copyright 2025 The Kubernetes Authors.
 #
@@ -39,6 +39,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 TEMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # snapshot
 SNAPSHOT_VERSION=${SNAPSHOT_VERSION:-"v8.1.0"}

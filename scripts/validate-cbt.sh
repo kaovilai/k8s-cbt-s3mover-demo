@@ -28,7 +28,7 @@ echo ""
 echo "Checking SnapshotMetadataService instances..."
 if kubectl get crd snapshotmetadataservices.cbt.storage.k8s.io &> /dev/null; then
     if kubectl get snapshotmetadataservices -A &> /dev/null; then
-        SERVICES=$(kubectl get snapshotmetadataservices -A --no-headers 2>/dev/null | wc -l)
+        SERVICES=$(kubectl get snapshotmetadataservices -A --no-headers 2>/dev/null | wc -l | tr -d '[:space:]')
         if [ "$SERVICES" -gt 0 ]; then
             echo "✓ Found $SERVICES SnapshotMetadataService instance(s)"
             kubectl get snapshotmetadataservices -A
