@@ -14,14 +14,10 @@ This tool creates VolumeSnapshots of Kubernetes PVCs and backs up block-level da
 - Block device reader/writer
 - Backup metadata structures
 - CLI with create and list commands
-
-⚠️ **TODO:**
-- Full gRPC client for CSI SnapshotMetadata service
-- GetMetadataDelta RPC for incremental backups
-- GetMetadataAllocated RPC for full backups
+- Full gRPC client for CSI SnapshotMetadata service (`pkg/metadata/cbt_client.go`)
+- `GetMetadataDelta` RPC for incremental backups
+- `GetMetadataAllocated` RPC for full backups
 - Block data upload to S3
-
-See [`pkg/metadata/cbt_client.go`](pkg/metadata/cbt_client.go) for detailed implementation notes.
 
 ## Building
 
@@ -181,7 +177,6 @@ go test -race ./...
 
 ## Future Enhancements
 
-- [ ] Complete gRPC client implementation
 - [ ] Block compression (gzip, zstd)
 - [ ] Encryption at rest
 - [ ] Parallel block uploads

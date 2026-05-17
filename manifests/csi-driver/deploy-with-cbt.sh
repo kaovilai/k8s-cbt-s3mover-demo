@@ -102,7 +102,6 @@ echo ""
 echo "Step 4: Install SnapshotMetadataService CRD"
 echo "-----------------------------------"
 echo "Installing SnapshotMetadataService CRD..."
-echo "Installing SnapshotMetadataService CRD..."
 # Using CRD from multiarch-grpc-health-probe branch
 # TODO: Switch back to upstream once PR #190 is merged
 kubectl apply -f https://raw.githubusercontent.com/kaovilai/external-snapshot-metadata/multiarch-grpc-health-probe/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
@@ -146,9 +145,6 @@ echo ""
 #    ...
 # fi
 
-# Deploy with environment variables
-# Note: Using canary tag for latest builds from main branch
-# See https://github.com/kubernetes-csi/csi-driver-host-path/blob/main/release-tools/README.md
 # Deploy with environment variables
 # Note: Using multiarch-grpc-health-probe branch for ARM64 support
 # TODO: Switch back to upstream registry/tag once PR #190 is merged
