@@ -20,6 +20,9 @@ metadata:
   namespace: cbt-demo
   labels:
     app: fs-writer
+    app.kubernetes.io/name: fs-writer
+    app.kubernetes.io/component: workload
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   restartPolicy: Always
   automountServiceAccountToken: false
