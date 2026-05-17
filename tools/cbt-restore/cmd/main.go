@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-restore/pkg/blocks"
@@ -125,7 +127,8 @@ func buildSnapshotChain(ctx context.Context, s3Client *s3.Client, target string)
 }
 
 func runPlan(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	fmt.Println("========================================")
 	fmt.Println("CBT Restore Plan")
@@ -195,7 +198,8 @@ func runPlan(cmd *cobra.Command, args []string) error {
 }
 
 func runRestore(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	startTime := time.Now()
 
 	fmt.Println("========================================")
@@ -351,7 +355,8 @@ func runRestore(cmd *cobra.Command, args []string) error {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	fmt.Println("========================================")
 	fmt.Println("Available Backups")
