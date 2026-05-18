@@ -83,8 +83,8 @@ including all snapshots to apply and total data to download.`,
 
 func addS3Flags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&s3Endpoint, "s3-endpoint", "e", "minio.cbt-demo.svc.cluster.local:9000", "S3 endpoint")
-	cmd.Flags().StringVarP(&s3AccessKey, "s3-access-key", "a", "minioadmin", "S3 access key")
-	cmd.Flags().StringVarP(&s3SecretKey, "s3-secret-key", "k", "minioadmin123", "S3 secret key")
+	cmd.Flags().StringVarP(&s3AccessKey, "s3-access-key", "a", os.Getenv("S3_ACCESS_KEY"), "S3 access key (env: S3_ACCESS_KEY)")
+	cmd.Flags().StringVarP(&s3SecretKey, "s3-secret-key", "k", os.Getenv("S3_SECRET_KEY"), "S3 secret key (env: S3_SECRET_KEY)")
 	cmd.Flags().StringVarP(&s3Bucket, "s3-bucket", "B", "snapshots", "S3 bucket name")
 	cmd.Flags().BoolVar(&s3UseSSL, "s3-use-ssl", false, "Use SSL for S3")
 }
