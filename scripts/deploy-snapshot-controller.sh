@@ -27,7 +27,7 @@ TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # snapshot
-SNAPSHOT_VERSION=${SNAPSHOT_VERSION:-"v8.1.0"}
+SNAPSHOT_VERSION=${SNAPSHOT_VERSION:-"v8.4.0"}
 SNAPSHOTTER_URL="https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/${SNAPSHOT_VERSION}"
 
 # snapshot controller
