@@ -29,7 +29,7 @@ jobs:
   demo:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [build-backup-tool, build-restore-tool, lint]
+    needs: [build-backup-tool, build-restore-tool, build-docker-images, lint]
     env:
       USE_REMOTE_CLUSTER: ${{ secrets.KUBECONFIG != '' }}
 
@@ -1002,3 +1002,37 @@ jobs:
         run: |
           go fmt ./...
           go vet ./...
+
+  build-docker-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build cbt-backup Docker image
+        run: docker build -t cbt-backup:test tools/cbt-backup
+
+      - name: Verify cbt-backup runs as non-root (UID 1000)
+        run: |
+          uid=$(docker run --rm --entrypoint id cbt-backup:test -u)
+          echo "cbt-backup container UID: $uid"
+          if [ "$uid" != "1000" ]; then
+            echo "ERROR: expected UID 1000, got $uid"
+            exit 1
+          fi
+          echo "✓ cbt-backup runs as UID 1000 (non-root)"
+
+      - name: Build cbt-restore Docker image
+        run: docker build -t cbt-restore:test tools/cbt-restore
+
+      - name: Verify cbt-restore runs as non-root (UID 1000)
+        run: |
+          uid=$(docker run --rm --entrypoint id cbt-restore:test -u)
+          echo "cbt-restore container UID: $uid"
+          if [ "$uid" != "1000" ]; then
+            echo "ERROR: expected UID 1000, got $uid"
+            exit 1
+          fi
+          echo "✓ cbt-restore runs as UID 1000 (non-root)"
