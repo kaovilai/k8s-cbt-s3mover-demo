@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"
 
@@ -38,7 +39,7 @@ fi
 # Build the backup tool
 echo ""
 echo "Building CBT backup tool..."
-cd tools/cbt-backup
+cd "$REPO_ROOT/tools/cbt-backup"
 
 # Download dependencies (with retry)
 echo "Downloading dependencies..."
@@ -53,7 +54,7 @@ echo "Compiling..."
 go build -v -o cbt-backup ./cmd
 
 echo "✓ Build successful"
-cd ../..
+cd "$REPO_ROOT"
 
 # Run the backup with GetMetadataAllocated
 echo ""
@@ -71,7 +72,7 @@ echo ""
 MINIO_ACCESS_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-user}' | _base64_decode)
 MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-password}' | _base64_decode)
 
-./tools/cbt-backup/cbt-backup create \
+"$REPO_ROOT/tools/cbt-backup/cbt-backup" create \
     --namespace "$NAMESPACE" \
     --pvc "$PVC_NAME" \
     --snapshot "$SNAPSHOT_NAME" \
