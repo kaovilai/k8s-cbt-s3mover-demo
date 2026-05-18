@@ -31,6 +31,8 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "1000m"
+    securityContext:
+      allowPrivilegeEscalation: false
     volumeMounts:
     - name: shared-volume
       mountPath: /output
