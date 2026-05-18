@@ -19,6 +19,10 @@ on:
         required: false
         default: 'false'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
   CLUSTER_NAME: cbt-demo-${{ github.event.inputs.cluster_name || 'test' }}-${{ github.run_number }}
