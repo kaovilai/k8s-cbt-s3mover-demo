@@ -24,6 +24,10 @@ FROM alpine:3.21
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates
 
+# Run as non-root user
+RUN adduser -D -u 1000 appuser
+USER appuser
+
 # Copy binary from builder
 COPY --from=builder /build/cbt-restore /usr/local/bin/cbt-restore
 
