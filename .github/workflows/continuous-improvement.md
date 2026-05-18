@@ -53,6 +53,7 @@ This repo demonstrates K8s Changed Block Tracking with S3-based data movement. K
 1. Search for all open issues with the `improvement` label
 2. Search for all open PRs with the `improvement` label
 3. **Do NOT create duplicates.** If an existing issue or PR already covers the same topic, stop.
+4. **Check closed issues and PRs** for prior rejections. Search closed issues/PRs for the same topic or file. If a closed issue/PR explains why a change was rejected or reverted, **skip that topic** — do not re-propose the same change.
 
 ## Step 2: Scan for Improvements
 
