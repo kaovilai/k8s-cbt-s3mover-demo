@@ -20,6 +20,11 @@ CSI_DRIVER_REPO="https://github.com/kaovilai/csi-driver-host-path.git"
 CSI_DRIVER_BRANCH="fix-sed-in-place-modifications"
 NAMESPACE="default"
 
+# Cert files are kept alive by generate-csi-certs.sh (via KEEP_CERT_FILES=1) so
+# step 5b can reuse them.  Clean them up when this script exits.
+_CERT_CLEANUP_GLOB="/tmp/csi-certs-*"
+trap 'rm -rf $_CERT_CLEANUP_GLOB 2>/dev/null || true' EXIT
+
 echo ""
 echo "Step 1: Deploy Snapshot Controller"
 echo "-----------------------------------"
@@ -37,7 +42,9 @@ echo "Step 2: Generate TLS Certificates"
 echo "-----------------------------------"
 if [ -f "$PROJECT_ROOT/scripts/generate-csi-certs.sh" ]; then
     echo "Generating TLS certificates for snapshot metadata service..."
-    "$PROJECT_ROOT/scripts/generate-csi-certs.sh"
+    # KEEP_CERT_FILES=1 prevents generate-csi-certs.sh from deleting the cert
+    # directory on exit so step 5b can re-apply fresh certs after deploy.sh runs.
+    KEEP_CERT_FILES=1 "$PROJECT_ROOT/scripts/generate-csi-certs.sh"
     echo "✓ TLS certificates generated"
 else
     echo "⚠ Warning: generate-csi-certs.sh not found"

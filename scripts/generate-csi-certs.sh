@@ -17,7 +17,11 @@ NAMESPACE="default"
 SECRET_NAME="csi-snapshot-metadata-certs"
 SERVICE_NAME="csi-snapshot-metadata"
 CERT_DIR="$(mktemp -d /tmp/csi-certs-XXXXXX)"
-trap 'rm -rf "$CERT_DIR"' EXIT
+# When KEEP_CERT_FILES=1 is set (e.g. by deploy-with-cbt.sh) the files are not
+# deleted on exit so the caller can reuse the cert files for a later step.
+if [ "${KEEP_CERT_FILES:-0}" != "1" ]; then
+    trap 'rm -rf "$CERT_DIR"' EXIT
+fi
 
 # Create temporary directory for certificates
 mkdir -p "$CERT_DIR"
