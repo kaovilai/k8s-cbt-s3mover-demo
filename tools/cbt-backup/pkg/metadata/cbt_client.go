@@ -162,7 +162,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 		address = c.socketAddress
 		fmt.Printf("Using manually configured endpoint: %s\n", address)
 		dialOpts = append(dialOpts,
-			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
+			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})), // #nosec G402 -- manually-configured endpoint; user is responsible for trust
 		)
 	} else {
 		svcAddress, caCertB64, audience, err := c.discoverService(connectCtx)
@@ -207,7 +207,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 // buildTLSConfig creates a TLS config from a base64-encoded CA certificate
 func buildTLSConfig(caCertBase64 string) (*tls.Config, error) {
 	if caCertBase64 == "" {
-		return &tls.Config{InsecureSkipVerify: true}, nil
+		return &tls.Config{InsecureSkipVerify: true}, nil // #nosec G402 -- no CA cert available; demo fallback only
 	}
 
 	caCertPEM, err := base64.StdEncoding.DecodeString(caCertBase64)
