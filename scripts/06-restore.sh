@@ -8,6 +8,9 @@ source "$SCRIPT_DIR/detect-storage.sh"
 NAMESPACE="${1:-cbt-demo}"
 SNAPSHOT_NAME="${2:-block-snapshot-3}"  # Default to latest snapshot
 
+# Portable md5 helper: md5sum (Linux) vs md5 -q (macOS)
+_md5() { if command -v md5sum &>/dev/null; then md5sum | awk '{print $1}'; else md5 -q; fi; }
+
 echo "=========================================="
 echo "Restore from Snapshot"
 echo "=========================================="
@@ -118,7 +121,7 @@ echo ""
 echo "[3/3] Verifying restored data..."
 
 # Compute checksum of restored data (first 1MB)
-RESTORED_CHECKSUM=$(kubectl exec -n "$NAMESPACE" block-writer -- dd if=/dev/xvda bs=4096 count=256 2>/dev/null | md5sum | awk '{print $1}')
+RESTORED_CHECKSUM=$(kubectl exec -n "$NAMESPACE" block-writer -- dd if=/dev/xvda bs=4096 count=256 2>/dev/null | _md5)
 
 echo ""
 echo "=========================================="

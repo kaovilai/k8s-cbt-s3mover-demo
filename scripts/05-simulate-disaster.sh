@@ -6,6 +6,9 @@ POD_NAME="block-writer"
 PVC_NAME="block-writer-data"
 DEVICE="/dev/xvda"
 
+# Portable md5 helper: md5sum (Linux) vs md5 -q (macOS)
+_md5() { if command -v md5sum &>/dev/null; then md5sum | awk '{print $1}'; else md5 -q; fi; }
+
 echo "=========================================="
 echo "Simulating Disaster Scenario"
 echo "=========================================="
@@ -37,7 +40,7 @@ BLOCK_WRITER_POD=$(kubectl get pod -n "$NAMESPACE" "$POD_NAME" -o jsonpath='{.me
 
 if [ -n "$BLOCK_WRITER_POD" ]; then
     echo "  Computing checksum of first 256 blocks (1MB) from device..."
-    PRE_DISASTER_CHECKSUM=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=256 2>/dev/null | md5sum | awk '{print $1}')
+    PRE_DISASTER_CHECKSUM=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=256 2>/dev/null | _md5)
     echo "  Device checksum (first 1MB): $PRE_DISASTER_CHECKSUM"
     echo "$PRE_DISASTER_CHECKSUM" > /tmp/cbt-demo-pre-disaster-checksum.txt
     echo "  Saved to /tmp/cbt-demo-pre-disaster-checksum.txt"

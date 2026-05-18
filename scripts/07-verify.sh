@@ -9,6 +9,9 @@ NAMESPACE="${1:-cbt-demo}"
 POD_NAME="block-writer"
 DEVICE="/dev/xvda"
 
+# Portable md5 helper: md5sum (Linux) vs md5 -q (macOS)
+_md5() { if command -v md5sum &>/dev/null; then md5sum | awk '{print $1}'; else md5 -q; fi; }
+
 echo "=========================================="
 echo "Post-Restore Verification"
 echo "=========================================="
@@ -70,7 +73,7 @@ fi
 # Check data integrity via checksum
 echo ""
 echo "[4/5] Checking data integrity..."
-CURRENT_CHECKSUM=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=256 2>/dev/null | md5sum | awk '{print $1}' || echo "")
+CURRENT_CHECKSUM=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=256 2>/dev/null | _md5 || echo "")
 
 if [ -n "$CURRENT_CHECKSUM" ]; then
     echo "✓ Data checksum computed: $CURRENT_CHECKSUM (first 1MB)"
@@ -79,15 +82,15 @@ if [ -n "$CURRENT_CHECKSUM" ]; then
     echo "  Verifying data at different offsets..."
 
     # Check offset 0 (first 10 blocks)
-    OFFSET_0=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=0 2>/dev/null | md5sum | awk '{print $1}')
+    OFFSET_0=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=0 2>/dev/null | _md5)
     echo "    Offset 0:   $OFFSET_0 (first 10 blocks)"
 
     # Check offset 100 (10 blocks starting at block 100)
-    OFFSET_100=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=100 2>/dev/null | md5sum | awk '{print $1}')
+    OFFSET_100=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=100 2>/dev/null | _md5)
     echo "    Offset 100: $OFFSET_100 (10 blocks at offset 100)"
 
     # Check offset 300 (10 blocks starting at block 300)
-    OFFSET_300=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=300 2>/dev/null | md5sum | awk '{print $1}')
+    OFFSET_300=$(kubectl exec -n "$NAMESPACE" "$POD_NAME" -- dd if="$DEVICE" bs=4096 count=10 skip=300 2>/dev/null | _md5)
     echo "    Offset 300: $OFFSET_300 (10 blocks at offset 300)"
 
     echo "  ✓ Data sampling completed successfully"
