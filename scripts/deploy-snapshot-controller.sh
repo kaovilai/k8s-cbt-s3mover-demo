@@ -15,7 +15,13 @@
 # limitations under the License.
 
 set -euo pipefail
-set -x
+
+for cmd in kubectl curl; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: required command '$cmd' not found in PATH" >&2
+        exit 1
+    fi
+done
 
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
