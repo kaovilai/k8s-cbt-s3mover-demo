@@ -361,12 +361,12 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 
 ### Working with the Backup Tool
 
-To complete the backup tool's block upload functionality:
+The backup tool's block upload functionality is complete:
 
 1. The gRPC client in `pkg/metadata/cbt_client.go` is **fully functional**
-2. The `runBackup()` function in `cmd/main.go` successfully calls `GetAllocatedBlocks()` or `GetDeltaBlocks()`
-3. **TODO**: After getting block metadata, read actual block data using `pkg/blocks/reader.go` and upload to S3 using `pkg/s3/client.go`
-4. The S3 path should be: `blocks/<snapshot-name>/block-<offset>-<size>`
+2. The `runBackup()` function in `cmd/main.go` calls `GetAllocatedBlocks()` or `GetDeltaBlocks()`
+3. Block data is read using `pkg/blocks/reader.go` and uploaded to S3 using `pkg/s3/client.go`
+4. The S3 path is: `blocks/<snapshot-name>/block-<offset>-<size>`
 
 ### Kubernetes API Interactions
 
@@ -388,7 +388,7 @@ The backup tool interacts with Kubernetes via:
 2. **CSI Driver Support**: Only CSI hostpath driver implements CBT; AWS EBS CSI does not yet support it
 3. **Block Mode Required**: Filesystem-mode volumes do not support CBT
 4. **Backup Tool Status**: Complete — CBT APIs, metadata, and block data upload all functional
-5. **Restore Tool**: Not yet implemented (planned)
+5. **Restore Tool**: Complete — resolves snapshot chains, downloads blocks from S3, writes to device with checksum verification
 
 ## References
 
