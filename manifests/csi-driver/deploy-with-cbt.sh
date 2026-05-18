@@ -142,16 +142,6 @@ echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  HOSTPATHPLUGIN_TAG=canary"
 echo ""
 
-# ARM64 Fix: Remove readiness probe from sidecar patch
-# The grpc_health_probe binary is AMD64-only in upstream images
-# See: https://github.com/kubernetes-csi/external-snapshot-metadata/pull/190
-# NOTE: We are now using a custom image (ghcr.io/kaovilai/csi-snapshot-metadata:multiarch-grpc-health-probe)
-# which includes the fix, so we NO LONGER need to patch the manifest.
-# Keeping this block commented out for reference until upstream merge.
-# if [[ "$ARCH" == "aarch64" ]] || [[ "$ARCH" == "arm64" ]]; then
-#    ...
-# fi
-
 # Deploy with environment variables
 # Note: Using multiarch-grpc-health-probe branch for ARM64 support
 # TODO: Switch back to upstream registry/tag once PR #190 is merged

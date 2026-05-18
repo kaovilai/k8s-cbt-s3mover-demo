@@ -14,8 +14,6 @@ This tool creates VolumeSnapshots of Kubernetes PVCs and backs up block-level da
 - Block device reader/writer
 - Backup metadata structures
 - CLI with create and list commands
-
-⚠️ **TODO:**
 - Full gRPC client for CSI SnapshotMetadata service
 - GetMetadataDelta RPC for incremental backups
 - GetMetadataAllocated RPC for full backups
@@ -181,7 +179,6 @@ go test -race ./...
 
 ## Future Enhancements
 
-- [ ] Complete gRPC client implementation
 - [ ] Block compression (gzip, zstd)
 - [ ] Encryption at rest
 - [ ] Parallel block uploads
