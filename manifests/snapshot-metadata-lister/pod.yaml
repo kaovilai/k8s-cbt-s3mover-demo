@@ -29,6 +29,8 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "1000m"
+    securityContext:
+      allowPrivilegeEscalation: false
     volumeMounts:
     - name: shared-volume
       mountPath: /output
@@ -46,6 +48,9 @@ spec:
       limits:
         memory: "64Mi"
         cpu: "100m"
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
     volumeMounts:
     - name: shared-volume
       mountPath: /tools
