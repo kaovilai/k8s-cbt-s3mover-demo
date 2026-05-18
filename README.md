@@ -295,45 +295,28 @@ kubectl get volumesnapshot,volumesnapshotcontent -n cbt-demo
 
 7. **Restore from backups**
    ```bash
-   # Restore tool not yet implemented
-   # Planned usage:
-   # ./tools/cbt-restore/cbt-restore restore --pvc block-writer-data \
-   #   --snapshots block-snapshot-1,block-snapshot-2
+   cd tools/cbt-restore
+   go build -o cbt-restore ./cmd
 
-   # Current workaround: Restore from VolumeSnapshot directly
-   kubectl apply -f - <<EOF
-   apiVersion: v1
-   kind: PersistentVolumeClaim
-   metadata:
-     name: block-writer-data-restored
-     namespace: cbt-demo
-   spec:
-     dataSource:
-       name: block-snapshot-2
-       kind: VolumeSnapshot
-       apiGroup: snapshot.storage.k8s.io
-     accessModes:
-       - ReadWriteOnce
-     volumeMode: Block
-     resources:
-       requests:
-         storage: 1Gi
-     storageClassName: csi-hostpath-sc
-   EOF
+   # Plan a restore (dry-run)
+   ./cbt-restore plan --snapshot block-snapshot-2
+
+   # Restore to a block device
+   ./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda
    ```
 
 ## 🔧 Tools
 
 ### Backup Tool (`cbt-backup`)
 
-**Status**: ✅ 90% Complete (Metadata Operations Functional)
+**Status**: ✅ 100% Complete
 
 A Go-based tool that:
 - ✅ Creates Kubernetes VolumeSnapshots
 - ✅ Connects to CSI SnapshotMetadata gRPC service
 - ✅ Calls `GetMetadataAllocated()` and `GetMetadataDelta()` to identify blocks
 - ✅ Stores complete metadata for snapshot chain in S3
-- ⚠️ Block data upload to S3 (TODO - metadata only currently)
+- ✅ Uploads block data to S3
 
 **Usage**:
 ```bash
@@ -350,7 +333,7 @@ go build -o cbt-backup ./cmd
 ./cbt-backup list
 ```
 
-**Implementation Note**: When fully implemented, this tool will use the CSI snapshot handle
+**Implementation Note**: This tool uses the CSI snapshot handle
 (from `VolumeSnapshotContent.Status.SnapshotHandle`) for incremental backups, following
 the API changes in kubernetes-csi/external-snapshot-metadata PR #180. This allows computing
 deltas even after the base VolumeSnapshot object has been deleted, enabling more flexible
@@ -358,16 +341,27 @@ snapshot retention policies.
 
 ### Restore Tool (`cbt-restore`)
 
-**Status**: 📝 Not Yet Implemented (0%)
+**Status**: ✅ 100% Complete
 
-**Planned features**:
-- List available snapshots from MinIO
-- Download snapshot metadata
-- Create new PVC (block mode)
-- Reconstruct volume by applying blocks in order
-- Verify data integrity with checksums
+A Go-based tool that:
+- ✅ Lists available snapshots from MinIO
+- ✅ Downloads snapshot metadata and resolves snapshot chains
+- ✅ Applies blocks in order to reconstruct the volume
+- ✅ Verifies data integrity with checksums
 
-**Note**: This tool is not yet implemented.
+**Usage**:
+```bash
+cd tools/cbt-restore
+
+# Plan restore (shows what would be done)
+./cbt-restore plan --snapshot block-snapshot-2
+
+# Restore to a block device
+./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda
+
+# List available backups
+./cbt-restore list
+```
 
 ## 📊 Verifying CBT is Working
 
@@ -865,11 +859,11 @@ For questions or issues, please open a GitHub issue.
 
 ---
 
-**Status**: 🏗️ Work in Progress - Infrastructure complete, backup tool 90% complete (CBT APIs functional), restore tool pending
+**Status**: ✅ Complete — Infrastructure, backup tool, and restore tool all fully implemented
 
 **Current Capabilities**:
 - ✅ Full CBT infrastructure with CSI hostpath driver
 - ✅ Backup tool with working CBT gRPC APIs (GetMetadataAllocated, GetMetadataDelta)
 - ✅ Snapshot metadata operations and S3 storage
-- ⚠️ Block data upload (TODO)
-- ⚠️ Restore tool (TODO)
+- ✅ Block data upload to S3
+- ✅ Restore tool with snapshot chain resolution and data integrity verification
