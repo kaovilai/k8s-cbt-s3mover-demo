@@ -5,10 +5,13 @@ echo "=========================================="
 echo "Cleaning up CBT demo environment"
 echo "=========================================="
 
-# Delete the Kind cluster
-if kind get clusters | grep -q "^cbt-demo$"; then
-    echo "Deleting Kind cluster..."
-    kind delete cluster --name cbt-demo
+# Delete the Minikube cluster
+if command -v minikube &>/dev/null && minikube status --profile cbt-demo >/dev/null 2>&1; then
+    echo "Deleting Minikube cluster 'cbt-demo'..."
+    minikube delete --profile cbt-demo
+    echo "✓ Minikube cluster deleted"
+else
+    echo "  Minikube cluster 'cbt-demo' not found, skipping"
 fi
 
 # Clean up temp directories
