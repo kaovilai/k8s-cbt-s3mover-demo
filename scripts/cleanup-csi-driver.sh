@@ -5,9 +5,12 @@ echo "=========================================="
 echo "Cleaning up CSI Hostpath Driver"
 echo "=========================================="
 
-# Check for -y flag
+# Check for -y flag or NON_INTERACTIVE env var
 YES_FLAG=false
 if [ "${1:-}" = "-y" ] || [ "${1:-}" = "--yes" ]; then
+    YES_FLAG=true
+fi
+if [ "${NON_INTERACTIVE:-false}" = "true" ]; then
     YES_FLAG=true
 fi
 
