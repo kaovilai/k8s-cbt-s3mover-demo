@@ -185,7 +185,7 @@ The CSI driver deployment follows the upstream external-snapshot-metadata integr
 1. **Deploy Snapshot Controller** (`scripts/deploy-snapshot-controller.sh`):
    - Installs VolumeSnapshot CRDs (VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass)
    - Deploys snapshot controller pod
-   - Uses snapshot version v8.1.0 from upstream external-snapshotter
+   - Uses snapshot version v8.4.0 from upstream external-snapshotter
 
 2. **Generate TLS Certificates** (`scripts/generate-csi-certs.sh`):
    - Creates self-signed CA certificate and key
@@ -292,14 +292,14 @@ minikube start --driver=podman --container-runtime=containerd
 **Recommended Driver Selection**:
 ```bash
 # macOS with Minikube 1.36+ (vfkit is default)
-minikube start --cpus=4 --memory=8192 --kubernetes-version=v1.34.0
+minikube start --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
 
 # macOS with explicit driver selection
-minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.34.0
+minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
 # OR
-minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.34.0
+minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
 # OR
-minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.34.0
+minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
 ```
 
 **macOS Note**: Requires GNU sed for deployment scripts. Install with `brew install gnu-sed` and add to PATH:

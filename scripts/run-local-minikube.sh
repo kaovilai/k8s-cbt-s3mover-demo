@@ -206,7 +206,7 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
     echo "  Driver: $DRIVER"
     echo "  CPUs: 4"
     echo "  Memory: 8192MB"
-    echo "  Kubernetes: v1.34.0 (CBT alpha support)"
+    echo "  Kubernetes: v1.33.0 (CBT alpha support)"
     echo ""
 
     minikube start \
@@ -214,7 +214,7 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
         --driver="$DRIVER" \
         --cpus=4 \
         --memory=8192 \
-        --kubernetes-version=v1.34.0 \
+        --kubernetes-version=v1.33.0 \
         --container-runtime=containerd \
         --wait=all
 
@@ -247,17 +247,17 @@ if [[ "$CURRENT_DRIVER" == "podman" ]]; then
     echo "Recommended alternatives with CONFIRMED block device support:"
     echo "  1. vfkit (macOS 13+, Minikube 1.36+):"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
+    echo "     minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
     echo ""
     echo "  2. Docker Desktop:"
     echo "     Install from: https://www.docker.com/products/docker-desktop/"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
+    echo "     minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
     echo ""
     echo "  3. QEMU:"
     echo "     brew install qemu"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.34.0"
+    echo "     minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
     echo ""
     echo "  4. Cloud Cluster: Use EKS/GKE/AKS for production testing"
     echo ""
@@ -371,7 +371,7 @@ echo "Your demo environment is ready with FULL block device support:"
 echo ""
 echo "Cluster:"
 echo "  • Minikube profile: cbt-demo"
-echo "  • Kubernetes: v1.34.0 (CBT alpha enabled)"
+echo "  • Kubernetes: v1.33.0 (CBT alpha enabled)"
 echo "  • Driver: ${DRIVER:-$CURRENT_DRIVER}"
 echo "  • Context: cbt-demo"
 echo ""
