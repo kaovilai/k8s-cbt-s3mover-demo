@@ -835,8 +835,6 @@ To start fresh without deleting the cluster:
 
 ## 🔮 Future Enhancements
 
-- [ ] Complete block data upload in backup tool (metadata operations functional)
-- [ ] Implement restore tool
 - [ ] Add data compression
 - [ ] Add encryption at rest
 - [ ] Parallel block uploads
