@@ -1,6 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
+# Parse arguments
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --non-interactive|-y)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --non-interactive, -y    Run without interactive prompts"
+            echo "  --help, -h              Show this help message"
+            echo ""
+            echo "Example:"
+            echo "  $0 --non-interactive    # Run automated setup"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 echo "=========================================="
 echo "CBT Demo - Remote Cluster Deployment"
 echo "=========================================="
@@ -25,7 +52,9 @@ fi
 
 echo "Connected to: $(kubectl config current-context)"
 echo ""
-read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+if [ "$NON_INTERACTIVE" = false ]; then
+    read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

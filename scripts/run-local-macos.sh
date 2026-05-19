@@ -1,6 +1,33 @@
 #!/bin/bash
 set -euo pipefail
 
+# Parse arguments
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --non-interactive|-y)
+            NON_INTERACTIVE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --non-interactive, -y    Run without interactive prompts"
+            echo "  --help, -h              Show this help message"
+            echo ""
+            echo "Example:"
+            echo "  $0 --non-interactive    # Run automated setup"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 echo "=========================================="
 echo "K8s CBT Demo - macOS Local Setup"
 echo "=========================================="
@@ -16,7 +43,9 @@ echo ""
 echo "⚠️  Note: This uses Kind with filesystem PVCs (not block mode)"
 echo "    For full block device testing, use minikube or cloud providers."
 echo ""
-read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+if [ "$NON_INTERACTIVE" = false ]; then
+    read -r -p "Press Enter to continue or Ctrl+C to cancel..."
+fi
 
 # Function to check if command exists
 command_exists() {
@@ -198,7 +227,7 @@ echo ""
 echo "This will create snapshots and demonstrate CBT..."
 echo ""
 
-if ./scripts/04-run-demo.sh; then
+if NON_INTERACTIVE=$NON_INTERACTIVE ./scripts/04-run-demo.sh; then
     echo -e "${GREEN}✓ Demo workflow completed${NC}"
 else
     echo -e "${RED}✗ Demo workflow failed${NC}"
