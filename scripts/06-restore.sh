@@ -88,25 +88,33 @@ metadata:
   namespace: $NAMESPACE
   labels:
     app: block-writer
+    app.kubernetes.io/name: block-writer
+    app.kubernetes.io/component: workload
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
+  restartPolicy: Always
+  automountServiceAccountToken: false
   containers:
   - name: writer
     image: busybox:1.37.0
-    command: ['sh', '-c', 'while true; do sleep 3600; done']
+    command:
+    - /bin/sh
+    - -c
+    - "tail -f /dev/null"
     securityContext:
       privileged: true
     volumeDevices:
-    - name: data
+    - name: data-volume
       devicePath: /dev/xvda
     resources:
       requests:
-        memory: "128Mi"
-        cpu: "100m"
+        memory: "32Mi"
+        cpu: "10m"
       limits:
-        memory: "256Mi"
-        cpu: "200m"
+        memory: "64Mi"
+        cpu: "100m"
   volumes:
-  - name: data
+  - name: data-volume
     persistentVolumeClaim:
       claimName: block-writer-data
 EOF
