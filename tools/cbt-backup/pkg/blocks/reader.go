@@ -180,8 +180,9 @@ func ScanNonZeroBlocks(devicePath string, blockSize int64) ([]BlockMetadata, err
 
 // BlockMetadata describes a block's location
 type BlockMetadata struct {
-	Offset int64 `json:"offset"`
-	Size   int64 `json:"size"`
+	Offset   int64  `json:"offset"`
+	Size     int64  `json:"size"`
+	Checksum string `json:"checksum,omitempty"`
 }
 
 // Writer writes blocks to a device
