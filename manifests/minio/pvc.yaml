@@ -3,6 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: minio-storage
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   accessModes:
     - ReadWriteOnce

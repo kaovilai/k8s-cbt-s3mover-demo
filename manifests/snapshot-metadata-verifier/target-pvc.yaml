@@ -3,6 +3,10 @@ kind: PersistentVolumeClaim
 metadata:
   name: verifier-target
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: snapshot-metadata-verifier
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   accessModes:
   - ReadWriteOnce

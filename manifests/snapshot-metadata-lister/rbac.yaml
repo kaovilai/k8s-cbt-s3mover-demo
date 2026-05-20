@@ -4,11 +4,19 @@ kind: ServiceAccount
 metadata:
   name: csi-client-sa
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: snapshot-metadata-lister
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: csi-client-role
+  labels:
+    app.kubernetes.io/name: snapshot-metadata-lister
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 rules:
 - apiGroups: ["snapshot.storage.k8s.io"]
   resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
@@ -27,6 +35,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: csi-client-binding
+  labels:
+    app.kubernetes.io/name: snapshot-metadata-lister
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
