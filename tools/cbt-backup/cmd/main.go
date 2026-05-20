@@ -256,13 +256,6 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("✓ Uploaded manifest: %s\n", manifestPath)
 
-	// Upload block list
-	blocksPath := fmt.Sprintf("metadata/%s/blocks.json", snap.Name)
-	if err := s3Client.UploadJSON(ctx, blocksPath, blockList); err != nil {
-		return fmt.Errorf("failed to upload block list: %w", err)
-	}
-	fmt.Printf("✓ Uploaded block list: %s\n", blocksPath)
-
 	// Upload chain info
 	chain := metadata.SnapshotChain{
 		SnapshotName:     snap.Name,
@@ -280,7 +273,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("✓ Uploaded chain info: %s\n", chainPath)
 
-	// Upload block data to S3
+	// Upload block data to S3 first so checksums can be stored in blocks.json
 	fmt.Println("\n[7/8] Uploading block data to S3...")
 
 	var bytesUploaded int64
@@ -304,6 +297,9 @@ func runBackup(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("failed to upload block at offset %d: %w", blockMeta.Offset, err)
 			}
 
+			// Persist checksum so restore can verify block integrity
+			blockList.Blocks[i].Checksum = blockData.Checksum
+
 			bytesUploaded += int64(len(blockData.Data))
 			blocksUploaded++
 
@@ -321,6 +317,13 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	} else {
 		fmt.Println("No blocks to upload")
 	}
+
+	// Upload block list after block data so checksums are included
+	blocksPath := fmt.Sprintf("metadata/%s/blocks.json", snap.Name)
+	if err := s3Client.UploadJSON(ctx, blocksPath, blockList); err != nil {
+		return fmt.Errorf("failed to upload block list: %w", err)
+	}
+	fmt.Printf("✓ Uploaded block list: %s\n", blocksPath)
 
 	// Create backup stats
 	stats := metadata.BackupStats{

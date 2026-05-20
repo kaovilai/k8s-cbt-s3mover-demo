@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/signal"
@@ -284,12 +283,12 @@ func runRestore(cmd *cobra.Command, args []string) error {
 			stats.BytesDownloaded += int64(len(blockData))
 			stats.BlocksDownloaded++
 
-			// Verify checksum if requested
+			// Verify checksum against value stored during backup
 			if verify {
-				hash := sha256.Sum256(blockData)
-				checksum := fmt.Sprintf("%x", hash)
-				// Store checksum for stats (actual verification happens if backup stored checksums)
-				_ = checksum
+				if !blocks.VerifyChecksum(blockData, blockMeta.Checksum) {
+					stats.ChecksumFailed++
+					return fmt.Errorf("checksum mismatch for block at offset %d in snapshot %s", blockMeta.Offset, snap)
+				}
 				stats.ChecksumVerified++
 			}
 
