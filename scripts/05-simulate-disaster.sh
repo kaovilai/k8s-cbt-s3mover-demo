@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v kubectl &>/dev/null; then
+    echo "Error: 'kubectl' is required but not found in PATH"
+    exit 1
+fi
+
 NAMESPACE="${1:-cbt-demo}"
 POD_NAME="block-writer"
 PVC_NAME="block-writer-data"
