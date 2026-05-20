@@ -45,6 +45,7 @@ spec:
       mountPath: /data
     securityContext:
       allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
   volumes:
   - name: data-volume
     persistentVolumeClaim:
