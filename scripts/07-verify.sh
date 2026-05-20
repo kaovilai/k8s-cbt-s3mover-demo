@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v kubectl &>/dev/null; then
+    echo "Error: 'kubectl' is required but not found in PATH"
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=detect-storage.sh
 source "$SCRIPT_DIR/detect-storage.sh"

@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v kubectl &>/dev/null; then
+    echo "Error: 'kubectl' is required but not found in PATH"
+    exit 1
+fi
+
 echo "=========================================="
 echo "Complete CBT Demo Workflow"
 echo "=========================================="
