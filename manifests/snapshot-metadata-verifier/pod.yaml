@@ -13,12 +13,12 @@ spec:
   serviceAccountName: csi-client-sa
   initContainers:
   - name: install-tools
-    image: golang:1.26
+    image: golang:1.26-alpine
     command:
     - /bin/sh
     - -c
     - |
-      apt-get update && apt-get install -y git
+      apk add --no-cache git
       git clone --branch v1.0.0 --depth 1 https://github.com/kubernetes-csi/external-snapshot-metadata.git /tmp/repo
       cd /tmp/repo/tools/snapshot-metadata-lister
       CGO_ENABLED=0 go build -o /output/snapshot-metadata-lister .
