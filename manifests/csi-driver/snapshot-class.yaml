@@ -2,6 +2,10 @@ apiVersion: snapshot.storage.k8s.io/v1
 kind: VolumeSnapshotClass
 metadata:
   name: csi-hostpath-snapclass
+  labels:
+    app.kubernetes.io/name: csi-hostpath
+    app.kubernetes.io/component: snapshot
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 driver: hostpath.csi.k8s.io
 deletionPolicy: Delete
 parameters:

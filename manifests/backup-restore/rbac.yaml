@@ -4,11 +4,19 @@ kind: ServiceAccount
 metadata:
   name: cbt-backup-sa
   namespace: cbt-demo
+  labels:
+    app.kubernetes.io/name: cbt-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: cbt-backup-role
+  labels:
+    app.kubernetes.io/name: cbt-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 rules:
 # Snapshot management
 - apiGroups: ["snapshot.storage.k8s.io"]
@@ -34,6 +42,10 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cbt-backup-binding
+  labels:
+    app.kubernetes.io/name: cbt-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
