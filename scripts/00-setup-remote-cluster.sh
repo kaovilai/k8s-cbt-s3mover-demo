@@ -5,6 +5,15 @@ echo "=========================================="
 echo "Setting up Remote Cluster for CBT demo"
 echo "=========================================="
 
+# Check for -y/--yes flag or NON_INTERACTIVE env var
+YES_FLAG=false
+if [ "${1:-}" = "-y" ] || [ "${1:-}" = "--yes" ]; then
+    YES_FLAG=true
+fi
+if [ "${NON_INTERACTIVE:-false}" = "true" ]; then
+    YES_FLAG=true
+fi
+
 # Check if kubectl is installed
 if ! command -v kubectl &> /dev/null; then
     echo "Error: kubectl is not installed"
@@ -41,11 +50,14 @@ echo "⚠️  WARNING: This script will deploy resources to the connected cluste
 echo ""
 echo "Connected to: $(kubectl config current-context)"
 echo ""
-read -r -p "Continue with deployment? (type 'yes' to proceed): " CONFIRM
-
-if [ "$CONFIRM" != "yes" ]; then
-    echo "Aborted."
-    exit 1
+if [ "$YES_FLAG" = true ]; then
+    echo "Auto-confirmed with non-interactive flag"
+else
+    read -r -p "Continue with deployment? (type 'yes' to proceed): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Aborted."
+        exit 1
+    fi
 fi
 
 # Check for required capabilities
