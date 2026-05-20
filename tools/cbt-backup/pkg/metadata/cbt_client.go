@@ -152,7 +152,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 		return nil
 	}
 
-	connectCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	setupCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var address string
@@ -165,7 +165,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})), // #nosec G402 -- manually-configured endpoint; user is responsible for trust
 		)
 	} else {
-		svcAddress, caCertB64, audience, err := c.discoverService(connectCtx)
+		svcAddress, caCertB64, audience, err := c.discoverService(setupCtx)
 		if err != nil {
 			return fmt.Errorf("failed to discover snapshot metadata service: %w", err)
 		}
@@ -177,7 +177,7 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 
-		token, err := c.createSAToken(connectCtx, audience)
+		token, err := c.createSAToken(setupCtx, audience)
 		if err != nil {
 			return fmt.Errorf("failed to create authentication token: %w", err)
 		}
@@ -185,21 +185,16 @@ func (c *CBTClient) Connect(ctx context.Context) error {
 		fmt.Println("Created SA token for gRPC authentication")
 	}
 
-	dialOpts = append(dialOpts, grpc.WithBlock())
-
 	fmt.Printf("Connecting to CSI SnapshotMetadata service at %s...\n", address)
-	conn, err := grpc.DialContext(
-		connectCtx,
-		address,
-		dialOpts...,
-	)
+	// grpc.NewClient creates a lazy connection; the actual TCP handshake happens on the first RPC call.
+	conn, err := grpc.NewClient(address, dialOpts...)
 	if err != nil {
-		return fmt.Errorf("failed to connect to CSI driver at %s: %w", address, err)
+		return fmt.Errorf("failed to create gRPC client for CSI driver at %s: %w", address, err)
 	}
 
 	c.conn = conn
 	c.client = api.NewSnapshotMetadataClient(conn)
-	fmt.Println("Connected to CSI SnapshotMetadata service")
+	fmt.Println("gRPC client created for CSI SnapshotMetadata service")
 
 	return nil
 }
