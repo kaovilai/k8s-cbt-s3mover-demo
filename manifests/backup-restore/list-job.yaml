@@ -27,8 +27,6 @@ spec:
         - /usr/local/bin/cbt-restore
         - list
         - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
-        - --s3-access-key=$(S3_ACCESS_KEY)
-        - --s3-secret-key=$(S3_SECRET_KEY)
         - --s3-bucket=snapshots
         resources:
           requests:
