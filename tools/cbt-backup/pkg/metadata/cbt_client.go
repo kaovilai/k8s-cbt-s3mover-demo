@@ -92,7 +92,7 @@ func (c *CBTClient) SetEndpoint(endpoint string) {
 func (c *CBTClient) discoverService(ctx context.Context) (address, caCertBase64, audience string, err error) {
 	gvr := schema.GroupVersionResource{
 		Group:    "cbt.storage.k8s.io",
-		Version:  "v1alpha1",
+		Version:  "v1beta1",
 		Resource: "snapshotmetadataservices",
 	}
 
