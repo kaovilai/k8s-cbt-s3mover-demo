@@ -161,8 +161,12 @@ metadata:
   namespace: $NAMESPACE
   labels:
     app: fs-backup-reader
+    app.kubernetes.io/name: fs-backup-reader
+    app.kubernetes.io/component: tool
+    app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
 spec:
   restartPolicy: Never
+  automountServiceAccountToken: false
   containers:
   - name: reader
     image: busybox:1.37.0
@@ -170,6 +174,13 @@ spec:
     - /bin/sh
     - -c
     - "tail -f /dev/null"
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
     volumeDevices:
     - name: backup-volume
       devicePath: /dev/xvdb
