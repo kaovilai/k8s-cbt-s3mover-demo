@@ -69,7 +69,7 @@ echo ""
 echo "[3/3] Cleaning up VolumeSnapshotContents..."
 CONTENTS=$(kubectl get volumesnapshotcontent --no-headers 2>/dev/null | grep -c "cbt-demo" || echo "0")
 if [ "$CONTENTS" -gt 0 ]; then
-    kubectl get volumesnapshotcontent --no-headers | grep "cbt-demo" | awk '{print $1}' | xargs -r kubectl delete volumesnapshotcontent --timeout=60s 2>/dev/null || true
+    kubectl get volumesnapshotcontent --no-headers | grep "cbt-demo" | awk '{print $1}' | xargs kubectl delete volumesnapshotcontent --timeout=60s 2>/dev/null || true
     echo "✓ Cleaned up $CONTENTS snapshot content(s)"
 else
     echo "  No snapshot contents found"
