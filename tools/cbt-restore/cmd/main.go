@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -395,7 +396,14 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("\nFound %d backup(s):\n\n", len(manifests))
-	for _, manifest := range manifests {
+	sorted := make([]metadata.SnapshotManifest, 0, len(manifests))
+	for _, m := range manifests {
+		sorted = append(sorted, m)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Timestamp.Before(sorted[j].Timestamp)
+	})
+	for _, manifest := range sorted {
 		snapType := "Full"
 		if manifest.IsIncremental {
 			snapType = "Incremental"
