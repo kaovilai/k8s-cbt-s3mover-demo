@@ -4,7 +4,7 @@ set -euo pipefail
 echo "=========================================="
 echo "Deploying CSI Hostpath Driver with Changed Block Tracking"
 echo "Following upstream external-snapshot-metadata integration test pattern"
-echo "Using PR #621 branch (fixes duplicate sidecar injection)"
+echo "Using upstream kubernetes-csi/csi-driver-host-path (master)"
 echo "=========================================="
 
 # Get the script's directory to reference other files
@@ -13,11 +13,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Configuration
 CSI_DRIVER_DIR="/tmp/csi-driver-host-path"
-# TEMPORARY: Using PR #621 branch until merged upstream
-# PR #621 fixes duplicate sidecar injection bug by copying files to TEMP_DIR before sed modifications
-# See: https://github.com/kubernetes-csi/csi-driver-host-path/pull/621
-CSI_DRIVER_REPO="https://github.com/kaovilai/csi-driver-host-path.git"
-CSI_DRIVER_BRANCH="fix-sed-in-place-modifications"
+CSI_DRIVER_REPO="https://github.com/kubernetes-csi/csi-driver-host-path.git"
+CSI_DRIVER_BRANCH="master"
 NAMESPACE="default"
 
 # Cert files are kept alive by generate-csi-certs.sh (via KEEP_CERT_FILES=1) so
@@ -109,10 +106,8 @@ echo ""
 echo "Step 4: Install SnapshotMetadataService CRD"
 echo "-----------------------------------"
 echo "Installing SnapshotMetadataService CRD..."
-# Using CRD from multiarch-grpc-health-probe branch
-# TODO: Switch back to upstream once PR #190 is merged
-kubectl apply -f https://raw.githubusercontent.com/kaovilai/external-snapshot-metadata/multiarch-grpc-health-probe/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
-    echo "Warning: Could not install SnapshotMetadataService CRD from kaovilai fork"
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/v1.0.0/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
+    echo "Warning: Could not install SnapshotMetadataService CRD from upstream v1.0.0"
     echo "Trying upstream main branch..."
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/main/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
         echo "Warning: Could not install SnapshotMetadataService CRD"
@@ -134,20 +129,18 @@ echo "-----------------------------------"
 cd "$CSI_DRIVER_DIR"
 
 echo "Deploying CSI driver with environment variables:"
-echo "  CSI_SNAPSHOT_METADATA_REGISTRY=ghcr.io/kaovilai"
+echo "  CSI_SNAPSHOT_METADATA_REGISTRY=registry.k8s.io/sig-storage"
 echo "  UPDATE_RBAC_RULES=false"
-echo "  CSI_SNAPSHOT_METADATA_TAG=multiarch-grpc-health-probe"
+echo "  CSI_SNAPSHOT_METADATA_TAG=v1.0.0"
 echo "  SNAPSHOT_METADATA_TESTS=true"
 echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
 echo "  HOSTPATHPLUGIN_TAG=canary"
 echo ""
 
 # Deploy with environment variables
-# Note: Using multiarch-grpc-health-probe branch for ARM64 support
-# TODO: Switch back to upstream registry/tag once PR #190 is merged
-CSI_SNAPSHOT_METADATA_REGISTRY="ghcr.io/kaovilai" \
+CSI_SNAPSHOT_METADATA_REGISTRY="registry.k8s.io/sig-storage" \
 UPDATE_RBAC_RULES="false" \
-CSI_SNAPSHOT_METADATA_TAG="multiarch-grpc-health-probe" \
+CSI_SNAPSHOT_METADATA_TAG="v1.0.0" \
 SNAPSHOT_METADATA_TESTS=true \
 HOSTPATHPLUGIN_REGISTRY="gcr.io/k8s-staging-sig-storage" \
 HOSTPATHPLUGIN_TAG="canary" \
