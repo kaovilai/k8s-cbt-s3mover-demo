@@ -81,12 +81,12 @@ else
     CSI_PODS=$(kubectl get pods -n default --no-headers 2>/dev/null | grep "csi-hostpath" | awk '{print $1}')
     if [ -n "$CSI_PODS" ]; then
         FOUND_SIDECAR=false
-        for POD in $CSI_PODS; do
+        while IFS= read -r POD; do
             if kubectl get pod "$POD" -n default -o yaml 2>/dev/null | grep -q "snapshot-metadata"; then
                 FOUND_SIDECAR=true
                 break
             fi
-        done
+        done <<< "$CSI_PODS"
 
         if [ "$FOUND_SIDECAR" = true ]; then
             echo "✓ Snapshot metadata sidecar is present"

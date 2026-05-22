@@ -125,7 +125,7 @@ if kubectl get volumesnapshot -n "$NAMESPACE" &> /dev/null; then
         echo ""
 
         # Check each snapshot
-        for snapshot in $(kubectl get volumesnapshot -n "$NAMESPACE" -o jsonpath='{.items[*].metadata.name}'); do
+        while IFS= read -r snapshot; do
             READY=$(kubectl get volumesnapshot "$snapshot" -n "$NAMESPACE" -o jsonpath='{.status.readyToUse}')
             SIZE=$(kubectl get volumesnapshot "$snapshot" -n "$NAMESPACE" -o jsonpath='{.status.restoreSize}')
             ERROR=$(kubectl get volumesnapshot "$snapshot" -n "$NAMESPACE" -o jsonpath='{.status.error.message}')
@@ -139,7 +139,7 @@ if kubectl get volumesnapshot -n "$NAMESPACE" &> /dev/null; then
                 fi
                 EXIT_CODE=1
             fi
-        done
+        done < <(kubectl get volumesnapshot -n "$NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
     else
         echo "⚠ No snapshots found"
     fi
