@@ -98,7 +98,7 @@ MINIO_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jso
         echo "3. The SnapshotMetadataService endpoint may not be accessible from outside the cluster"
         echo ""
         echo "To run this successfully, deploy the backup tool as a Kubernetes Job."
-        echo "See manifests/backup-job.yaml for an example deployment."
+        echo "See manifests/backup-restore/backup-job.yaml for an example deployment."
     fi
 }
 
