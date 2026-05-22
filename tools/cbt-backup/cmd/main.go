@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -411,9 +412,18 @@ func runList(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Sort manifests by timestamp for deterministic output
+	sorted := make([]metadata.SnapshotManifest, 0, len(manifests))
+	for _, m := range manifests {
+		sorted = append(sorted, m)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Timestamp.Before(sorted[j].Timestamp)
+	})
+
 	// Display manifests
-	fmt.Printf("\nFound %d backup(s):\n\n", len(manifests))
-	for _, manifest := range manifests {
+	fmt.Printf("\nFound %d backup(s):\n\n", len(sorted))
+	for _, manifest := range sorted {
 		fmt.Printf("Snapshot: %s\n", manifest.Name)
 		fmt.Printf("  PVC:           %s\n", manifest.PVCName)
 		fmt.Printf("  Timestamp:     %s\n", manifest.Timestamp.Format(time.RFC3339))
