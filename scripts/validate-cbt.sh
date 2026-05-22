@@ -128,7 +128,7 @@ fi
 # Check for snapshots (if any exist)
 echo ""
 echo "Checking for existing VolumeSnapshots..."
-SNAPSHOTS=$(kubectl get volumesnapshot -A --no-headers 2>/dev/null | wc -l)
+SNAPSHOTS=$(kubectl get volumesnapshot -A --no-headers 2>/dev/null | wc -l | tr -d '[:space:]')
 if [ "$SNAPSHOTS" -gt 0 ]; then
     echo "✓ Found $SNAPSHOTS VolumeSnapshot(s)"
     kubectl get volumesnapshot -A
