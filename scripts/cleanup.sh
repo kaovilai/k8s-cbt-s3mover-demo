@@ -14,11 +14,12 @@ else
     echo "  Minikube cluster 'cbt-demo' not found, skipping"
 fi
 
-# Clean up temp directories
-echo "Cleaning up temporary directories..."
+# Clean up temp directories and files
+echo "Cleaning up temporary directories and files..."
 rm -rf /tmp/cbt-demo-csi
 rm -rf /tmp/cbt-demo-minio
 rm -rf /tmp/csi-driver-host-path
+rm -f /tmp/cbt-demo-pre-disaster-checksum.txt
 
 echo ""
 echo "✓ Cleanup complete!"
