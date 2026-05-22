@@ -16,7 +16,7 @@ echo "Velero's CSI Snapshot Exposer always creates the backupPVC in Block"
 echo "mode regardless of the source PVC's volume mode, because CBT operates"
 echo "on the underlying block device."
 echo ""
-if [ -t 0 ]; then
+if [ "${NON_INTERACTIVE:-false}" = "false" ] && [ -t 0 ]; then
     read -r -p "Press Enter to continue or Ctrl+C to cancel..."
 fi
 
