@@ -103,6 +103,7 @@ func newS3Client() (*s3.Client, error) {
 func buildSnapshotChain(ctx context.Context, s3Client *s3.Client, target string) ([]string, map[string]*metadata.SnapshotManifest, error) {
 	chain := []string{target}
 	manifests := make(map[string]*metadata.SnapshotManifest)
+	seen := map[string]bool{target: true}
 
 	current := target
 	for {
@@ -116,6 +117,11 @@ func buildSnapshotChain(ctx context.Context, s3Client *s3.Client, target string)
 		if !manifest.IsIncremental || manifest.BaseSnapshotName == "" {
 			break
 		}
+
+		if seen[manifest.BaseSnapshotName] {
+			return nil, nil, fmt.Errorf("cycle detected in snapshot chain at %q", manifest.BaseSnapshotName)
+		}
+		seen[manifest.BaseSnapshotName] = true
 
 		// Prepend the base snapshot
 		chain = append([]string{manifest.BaseSnapshotName}, chain...)
