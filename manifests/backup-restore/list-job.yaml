@@ -19,6 +19,9 @@ spec:
     spec:
       automountServiceAccountToken: false
       restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: list
         image: cbt-restore:latest
