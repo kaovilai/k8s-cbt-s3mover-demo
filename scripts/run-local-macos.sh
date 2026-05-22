@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Parse arguments
 NON_INTERACTIVE=false
+export NON_INTERACTIVE
 while [[ $# -gt 0 ]]; do
     case $1 in
         --non-interactive|-y)
@@ -227,7 +228,7 @@ echo ""
 echo "This will create snapshots and demonstrate CBT..."
 echo ""
 
-if NON_INTERACTIVE=$NON_INTERACTIVE ./scripts/04-run-demo.sh; then
+if ./scripts/04-run-demo.sh; then
     echo -e "${GREEN}✓ Demo workflow completed${NC}"
 else
     echo -e "${RED}✗ Demo workflow failed${NC}"
