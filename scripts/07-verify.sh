@@ -131,7 +131,7 @@ fi
 # Verify snapshots still exist
 echo ""
 echo "Checking available snapshots..."
-SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+SNAPSHOT_COUNT=$(kubectl get volumesnapshot -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d '[:space:]')
 if [ "$SNAPSHOT_COUNT" -gt 0 ]; then
     echo "✓ Found $SNAPSHOT_COUNT snapshot(s):"
     kubectl get volumesnapshot -n "$NAMESPACE" -o custom-columns=\
