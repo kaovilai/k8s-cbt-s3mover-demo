@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Parse arguments
 NON_INTERACTIVE=false
+export NON_INTERACTIVE
 while [[ $# -gt 0 ]]; do
     case $1 in
         --non-interactive|-y)
