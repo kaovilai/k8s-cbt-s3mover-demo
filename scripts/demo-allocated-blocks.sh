@@ -73,33 +73,33 @@ S3_ACCESS_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpa
 S3_SECRET_KEY=$(kubectl get secret minio-credentials -n "${NAMESPACE}" -o jsonpath='{.data.root-password}' | _base64_decode)
 export S3_ACCESS_KEY S3_SECRET_KEY
 
-"$REPO_ROOT/tools/cbt-backup/cbt-backup" create \
+if "$REPO_ROOT/tools/cbt-backup/cbt-backup" create \
     --namespace "$NAMESPACE" \
     --pvc "$PVC_NAME" \
     --snapshot "$SNAPSHOT_NAME" \
     --s3-endpoint "minio.cbt-demo.svc.cluster.local:9000" \
     --s3-bucket "snapshots" \
-    --snapshot-class "$SNAPSHOT_CLASS" || {
+    --snapshot-class "$SNAPSHOT_CLASS"; then
+    echo ""
+    echo "=========================================="
+    echo "✓ Backup completed successfully"
+    echo "=========================================="
+else
     EXIT_CODE=$?
     echo ""
     echo "=========================================="
     echo "Backup command exited with code $EXIT_CODE"
     echo "=========================================="
-
-    if [ $EXIT_CODE -eq 0 ]; then
-        echo "✓ Backup completed successfully"
-    else
-        echo "⚠ Backup encountered issues"
-        echo ""
-        echo "This is expected in the demo environment because:"
-        echo "1. The backup tool needs to run inside a pod with access to the CSI driver socket"
-        echo "2. Direct access to block devices requires privileged containers"
-        echo "3. The SnapshotMetadataService endpoint may not be accessible from outside the cluster"
-        echo ""
-        echo "To run this successfully, deploy the backup tool as a Kubernetes Job."
-        echo "See manifests/backup-restore/backup-job.yaml for an example deployment."
-    fi
-}
+    echo "⚠ Backup encountered issues"
+    echo ""
+    echo "This is expected in the demo environment because:"
+    echo "1. The backup tool needs to run inside a pod with access to the CSI driver socket"
+    echo "2. Direct access to block devices requires privileged containers"
+    echo "3. The SnapshotMetadataService endpoint may not be accessible from outside the cluster"
+    echo ""
+    echo "To run this successfully, deploy the backup tool as a Kubernetes Job."
+    echo "See manifests/backup-restore/backup-job.yaml for an example deployment."
+fi
 
 echo ""
 echo "=========================================="
