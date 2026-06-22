@@ -22,6 +22,9 @@ spec:
         app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: minio
         image: quay.io/minio/minio:RELEASE.2025-10-15T17-29-55Z
