@@ -14,6 +14,7 @@ spec:
   initContainers:
   - name: install-client
     image: golang:1.26-alpine
+    imagePullPolicy: IfNotPresent
     command:
     - /bin/sh
     - -c
@@ -37,6 +38,7 @@ spec:
   containers:
   - name: run-client
     image: busybox:1.37.0
+    imagePullPolicy: IfNotPresent
     command:
     - /bin/sh
     - -c
