@@ -102,6 +102,7 @@ spec:
   containers:
   - name: writer
     image: busybox:1.37.0
+    imagePullPolicy: IfNotPresent
     command:
     - /bin/sh
     - -c
