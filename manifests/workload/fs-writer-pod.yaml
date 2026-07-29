@@ -26,6 +26,9 @@ metadata:
 spec:
   restartPolicy: Always
   automountServiceAccountToken: false
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: writer
     image: busybox:1.37.0
