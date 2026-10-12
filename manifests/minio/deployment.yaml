@@ -26,6 +26,7 @@ spec:
       - name: minio
         # quay.io/minio/minio and Docker Hub minio/minio no longer allow anonymous pulls
         image: cgr.dev/chainguard/minio:latest
+        imagePullPolicy: IfNotPresent
         args:
         - server
         - /data
