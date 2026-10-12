@@ -19,6 +19,10 @@ on:
         required: false
         default: 'false'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
   CLUSTER_NAME: cbt-demo-${{ github.event.inputs.cluster_name || 'test' }}-${{ github.run_number }}
@@ -116,24 +120,27 @@ jobs:
           kubectl get storageclass
 
           echo ""
-          echo "Note: CBT alpha APIs are available by default in k8s 1.33+"
+          echo "Note: CBT APIs are beta in k8s 1.36+ (alpha since 1.33) and need no feature gate"
           echo "No feature gates required - enabled through CSI driver implementation"
 
       - name: Install VolumeSnapshot CRDs
         run: |
           echo "Installing VolumeSnapshot CRDs..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
       - name: Deploy Snapshot Controller
         run: |
           echo "Deploying Snapshot Controller..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          # The v8.6.0 tag's manifest still pins the previous controller image (v8.5.0)
+          kubectl set image deployment/snapshot-controller snapshot-controller=registry.k8s.io/sig-storage/snapshot-controller:v8.6.0 -n kube-system
+          kubectl rollout status deployment/snapshot-controller -n kube-system --timeout=120s
 
           echo "Waiting for snapshot-controller to be ready..."
           kubectl wait --for=condition=Available deployment/snapshot-controller -n kube-system --timeout=60s || {
@@ -159,7 +166,7 @@ jobs:
           else
             echo "⚠️ Warning: SnapshotMetadataService CRD not found"
             echo "CBT functionality may be limited"
-            echo "This is expected as the CRD is still in alpha and may not be publicly available yet"
+            echo "This is expected if the CRD is not available on this cluster"
           fi
 
       - name: Validate CBT Setup

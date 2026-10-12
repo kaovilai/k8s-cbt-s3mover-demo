@@ -4,7 +4,7 @@ set -euo pipefail
 echo "=========================================="
 echo "Deploying CSI Hostpath Driver with Changed Block Tracking"
 echo "Following upstream external-snapshot-metadata integration test pattern"
-echo "Using upstream kubernetes-csi/csi-driver-host-path (master)"
+echo "Using upstream kubernetes-csi/csi-driver-host-path (v1.18.0)"
 echo "=========================================="
 
 # Get the script's directory to reference other files
@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Configuration
 CSI_DRIVER_DIR="/tmp/csi-driver-host-path"
 CSI_DRIVER_REPO="https://github.com/kubernetes-csi/csi-driver-host-path.git"
-CSI_DRIVER_BRANCH="master"
+CSI_DRIVER_BRANCH="v1.18.0"
 NAMESPACE="default"
 
 # Cert files are kept alive by generate-csi-certs.sh (via KEEP_CERT_FILES=1) so
@@ -60,7 +60,8 @@ if [ -d "$CSI_DRIVER_DIR" ]; then
     # Check if it's a git repository and from the correct remote
     if [ -d "$CSI_DRIVER_DIR/.git" ]; then
         CURRENT_REMOTE=$(cd "$CSI_DRIVER_DIR" && git config --get remote.origin.url 2>/dev/null || echo "")
-        CURRENT_BRANCH=$(cd "$CSI_DRIVER_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        # A tag checkout is a detached HEAD, so prefer the exact tag name over the branch name
+        CURRENT_BRANCH=$(cd "$CSI_DRIVER_DIR" && { git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null; } || echo "")
 
         if [ "$CURRENT_REMOTE" = "$CSI_DRIVER_REPO" ] && [ "$CURRENT_BRANCH" = "$CSI_DRIVER_BRANCH" ]; then
             echo "✓ Existing repository is from correct repo and branch"
@@ -106,8 +107,8 @@ echo ""
 echo "Step 4: Install SnapshotMetadataService CRD"
 echo "-----------------------------------"
 echo "Installing SnapshotMetadataService CRD..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/v1.0.0/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
-    echo "Warning: Could not install SnapshotMetadataService CRD from upstream v1.0.0"
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/v1.1.0/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
+    echo "Warning: Could not install SnapshotMetadataService CRD from upstream v1.1.0"
     echo "Trying upstream main branch..."
     kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshot-metadata/main/client/config/crd/cbt.storage.k8s.io_snapshotmetadataservices.yaml || {
         echo "Warning: Could not install SnapshotMetadataService CRD"
@@ -131,19 +132,19 @@ cd "$CSI_DRIVER_DIR"
 echo "Deploying CSI driver with environment variables:"
 echo "  CSI_SNAPSHOT_METADATA_REGISTRY=registry.k8s.io/sig-storage"
 echo "  UPDATE_RBAC_RULES=false"
-echo "  CSI_SNAPSHOT_METADATA_TAG=v1.0.0"
+echo "  CSI_SNAPSHOT_METADATA_TAG=v1.1.0"
 echo "  SNAPSHOT_METADATA_TESTS=true"
-echo "  HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage"
-echo "  HOSTPATHPLUGIN_TAG=canary"
+echo "  HOSTPATHPLUGIN_REGISTRY=registry.k8s.io/sig-storage"
+echo "  HOSTPATHPLUGIN_TAG=v1.18.0"
 echo ""
 
 # Deploy with environment variables
 CSI_SNAPSHOT_METADATA_REGISTRY="registry.k8s.io/sig-storage" \
 UPDATE_RBAC_RULES="false" \
-CSI_SNAPSHOT_METADATA_TAG="v1.0.0" \
+CSI_SNAPSHOT_METADATA_TAG="v1.1.0" \
 SNAPSHOT_METADATA_TESTS=true \
-HOSTPATHPLUGIN_REGISTRY="gcr.io/k8s-staging-sig-storage" \
-HOSTPATHPLUGIN_TAG="canary" \
+HOSTPATHPLUGIN_REGISTRY="registry.k8s.io/sig-storage" \
+HOSTPATHPLUGIN_TAG="v1.18.0" \
 ./deploy/kubernetes-latest/deploy.sh
 
 echo "✓ CSI driver deployment initiated"
