@@ -27,7 +27,7 @@ Efficient Backup with Changed Block Tracking
 <!--
 Welcome! This presentation demonstrates Changed Block Tracking (CBT) in Kubernetes.
 - Introduce yourself and your role
-- Mention timeline: K8s 1.33 alpha, OCP 4.20 DevPreviewNoUpgrade, K8s 1.36 proposed beta
+- Mention timeline: K8s 1.33 alpha, OCP 4.20 DevPreviewNoUpgrade, K8s 1.36 beta
 - Set expectations: ~25 minute talk with technical deep-dive
 - Audience: DevOps engineers, backup admins, K8s storage users
 -->
@@ -48,8 +48,8 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 
 - **K8s 1.33** — Alpha (no feature gate)
 - **OCP 4.20** — DevPreviewNoUpgrade
-- **K8s 1.36** — Proposed Beta target
-- **OCP 5.0** — Expected K8s 1.36 beta
+- **K8s 1.36** — Beta (`SnapshotMetadataService` v1beta1)
+- **OCP 4.23 / 5.0** — Expected on K8s 1.36 (beta); provisional, from CI builds
 
 </v-clicks>
 
@@ -92,7 +92,7 @@ graph TB
 <!--
 - Define CBT upfront so the audience has context for the history slides
 - KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 DevPreviewNoUpgrade
-- Timeline: K8s 1.36 proposed beta (estimated OCP 5.0), last 4.x is 4.23
+- Timeline: K8s 1.36 beta; OCP 4.23 / 5.0 on K8s 1.36 is provisional (seen in CI builds, not confirmed by GA release notes), last 4.x expected to be 4.23; external-snapshot-metadata v1.1.0 is the current beta sidecar release
 - Note: CBT works at block layer regardless of volume mode (Filesystem or Block)
 -->
 
@@ -850,7 +850,7 @@ layout: default
 ## build-backup-tool
 
 **Build & test** (~1m 20s)
-- Go 1.25
+- Go 1.26
 - Download deps
 - Build binary
 - Run tests
@@ -916,7 +916,7 @@ layout: default
 ## Infrastructure Deployed
 
 - **Cluster**: Minikube (4 CPUs, 8GB RAM)
-- **CSI Driver**: hostpath canary + metadata sidecar
+- **CSI Driver**: hostpath + metadata sidecar (results below are from an earlier run; the demo now deploys hostpath v1.18.0 + sidecar v1.1.0)
 - **TLS**: Fresh certs generated per run
 
 | Component | Result |
@@ -1183,7 +1183,7 @@ Closing:
 - Common questions to anticipate:
   - When will production CSI drivers support CBT? (Vendor-dependent, ask your CSI provider)
   - Does this work with EBS/Azure Disk? (Not yet, but KEP-3314 enables it)
-  - Is this production-ready? (Alpha in K8s 1.33+, API is stable, CSI driver support needed)
+  - Is this production-ready? (Beta in K8s 1.36+, alpha since 1.33; API is v1beta1, CSI driver support needed)
   - How does this compare to cloud provider CBT? (Similar concept, K8s provides standardized API)
 - Provide contact info or repo link for follow-up questions
 -->

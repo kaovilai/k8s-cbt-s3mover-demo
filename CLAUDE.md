@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a demonstration of Kubernetes Changed Block Tracking (CBT) using CSI hostpath driver with incremental backup to MinIO S3 storage. The project showcases real CBT API usage for efficient block-level backups and disaster recovery.
 
 **Key Technologies:**
-- Kubernetes 1.33+ (for CBT alpha APIs)
+- Kubernetes 1.33+ (CBT alpha in 1.33, beta in 1.36)
 - CSI hostpath driver with SnapshotMetadata service
 - MinIO for S3-compatible storage
-- Go 1.22+ for backup/restore tools
+- Go 1.26+ for backup/restore tools
 - Block-mode PVCs (required for CBT)
 
 ## Architecture
@@ -185,7 +185,7 @@ The CSI driver deployment follows the upstream external-snapshot-metadata integr
 1. **Deploy Snapshot Controller** (`scripts/deploy-snapshot-controller.sh`):
    - Installs VolumeSnapshot CRDs (VolumeSnapshot, VolumeSnapshotContent, VolumeSnapshotClass)
    - Deploys snapshot controller pod
-   - Uses snapshot version v8.4.0 from upstream external-snapshotter
+   - Uses snapshot version v8.6.0 from upstream external-snapshotter
 
 2. **Generate TLS Certificates** (`scripts/generate-csi-certs.sh`):
    - Creates self-signed CA certificate and key
@@ -198,16 +198,16 @@ The CSI driver deployment follows the upstream external-snapshot-metadata integr
    - Uses temporary directory `/tmp/csi-driver-host-path`
 
 4. **Install SnapshotMetadataService CRD**:
-   - Applies from external-snapshot-metadata repository (v0.1.0 or main)
+   - Applies from external-snapshot-metadata repository (v1.1.0, falls back to main)
    - Waits for CRD to be established
 
 5. **Deploy CSI Driver with Environment Variables**:
-   - `CSI_SNAPSHOT_METADATA_REGISTRY=gcr.io/k8s-staging-sig-storage`
+   - `CSI_SNAPSHOT_METADATA_REGISTRY=registry.k8s.io/sig-storage`
    - `UPDATE_RBAC_RULES=false` (RBAC already configured)
-   - `CSI_SNAPSHOT_METADATA_TAG=test` (uses test image)
+   - `CSI_SNAPSHOT_METADATA_TAG=v1.1.0` (csi-snapshot-metadata sidecar release)
    - `SNAPSHOT_METADATA_TESTS=true` (enables metadata sidecar)
-   - `HOSTPATHPLUGIN_REGISTRY=gcr.io/k8s-staging-sig-storage`
-   - `HOSTPATHPLUGIN_TAG=canary` (latest development version)
+   - `HOSTPATHPLUGIN_REGISTRY=registry.k8s.io/sig-storage`
+   - `HOSTPATHPLUGIN_TAG=v1.18.0` (release; csi-driver-host-path cloned at the same tag)
 
 6. **Apply Testdata Manifests**:
    - Creates SnapshotMetadataService CR (`hostpath.csi.k8s.io`)
@@ -292,14 +292,14 @@ minikube start --driver=podman --container-runtime=containerd
 **Recommended Driver Selection**:
 ```bash
 # macOS with Minikube 1.36+ (vfkit is default)
-minikube start --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
+minikube start --cpus=4 --memory=8192 --kubernetes-version=v1.36.5
 
 # macOS with explicit driver selection
-minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
+minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.36.5
 # OR
-minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
+minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.36.5
 # OR
-minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.33.0
+minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.36.5
 ```
 
 **macOS Note**: Requires GNU sed for deployment scripts. Install with `brew install gnu-sed` and add to PATH:
@@ -384,7 +384,7 @@ The backup tool interacts with Kubernetes via:
 
 ## Known Issues and Limitations
 
-1. **CBT API Alpha Status**: Requires Kubernetes 1.33+ (alpha feature, no feature gates needed)
+1. **CBT API Maturity**: Alpha in Kubernetes 1.33, beta in 1.36 (KEP-3314); requires Kubernetes 1.33+, no feature gates needed
 2. **CSI Driver Support**: Only CSI hostpath driver implements CBT; AWS EBS CSI does not yet support it
 3. **Block Mode Required**: Filesystem-mode volumes do not support CBT
 4. **Backup Tool Status**: Complete — CBT APIs, metadata, and block data upload all functional
