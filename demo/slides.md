@@ -49,7 +49,7 @@ Changed Block Tracking (**KEP-3314**) identifies **only the blocks** that have c
 - **K8s 1.33** — Alpha (no feature gate)
 - **OCP 4.20** — DevPreviewNoUpgrade
 - **K8s 1.36** — Beta (`SnapshotMetadataService` v1beta1)
-- **OCP 4.23 / 5.0** — Based on K8s 1.36 (beta)
+- **OCP 4.23 / 5.0** — Expected on K8s 1.36 (beta); provisional, from CI builds
 
 </v-clicks>
 
@@ -92,7 +92,7 @@ graph TB
 <!--
 - Define CBT upfront so the audience has context for the history slides
 - KEP-3314 introduces CBT as alpha in K8s 1.33+ (no feature gate), OCP 4.20 DevPreviewNoUpgrade
-- Timeline: K8s 1.36 beta (OCP 4.23 / 5.0 base), last 4.x is 4.23; external-snapshot-metadata v1.1.0 is the current beta sidecar release
+- Timeline: K8s 1.36 beta; OCP 4.23 / 5.0 on K8s 1.36 is provisional (seen in CI builds, not confirmed by GA release notes), last 4.x expected to be 4.23; external-snapshot-metadata v1.1.0 is the current beta sidecar release
 - Note: CBT works at block layer regardless of volume mode (Filesystem or Block)
 -->
 
@@ -916,7 +916,7 @@ layout: default
 ## Infrastructure Deployed
 
 - **Cluster**: Minikube (4 CPUs, 8GB RAM)
-- **CSI Driver**: hostpath v1.18.0 + metadata sidecar v1.1.0
+- **CSI Driver**: hostpath + metadata sidecar (results below are from an earlier run; the demo now deploys hostpath v1.18.0 + sidecar v1.1.0)
 - **TLS**: Fresh certs generated per run
 
 | Component | Result |

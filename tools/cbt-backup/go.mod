@@ -7,7 +7,7 @@ require (
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.6.0
 	github.com/minio/minio-go/v7 v7.0.82
 	github.com/spf13/cobra v1.8.1
-	google.golang.org/grpc v1.82.0
+	google.golang.org/grpc v1.83.1
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1

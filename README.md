@@ -16,7 +16,7 @@ This demo showcases:
 
 - [Minikube](https://minikube.sigs.k8s.io/) or a cloud Kubernetes cluster
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.28.0 or later
-- [Go](https://golang.org/) 1.22 or later (for building tools)
+- [Go](https://golang.org/) 1.26 or later (for building tools)
 - ~10GB free disk space
 
 **CBT Support**: Changed Block Tracking API was introduced as an alpha feature in **Kubernetes 1.33** and graduated to **beta in Kubernetes 1.36** (KEP-3314). For full CBT functionality, use Kubernetes 1.33 or later; the demo scripts default to Kubernetes 1.36.

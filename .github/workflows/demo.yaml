@@ -121,6 +121,9 @@ jobs:
           echo "Deploying Snapshot Controller..."
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
           kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          # The v8.6.0 tag's manifest still pins the previous controller image (v8.5.0)
+          kubectl set image deployment/snapshot-controller snapshot-controller=registry.k8s.io/sig-storage/snapshot-controller:v8.6.0 -n kube-system
+          kubectl rollout status deployment/snapshot-controller -n kube-system --timeout=120s
 
           echo "Waiting for snapshot-controller to be ready..."
           kubectl wait --for=condition=Available deployment/snapshot-controller -n kube-system --timeout=60s || {
