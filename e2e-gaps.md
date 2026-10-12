@@ -21,16 +21,16 @@ the upstream e2e test suites for CSI Changed Block Tracking (CBT):
 | Setup Step | external-snapshot-metadata | kubernetes/kubernetes | demo.yaml |
 |---|---|---|---|
 | Cluster | Minikube via `medyagh/setup-minikube` | CSI Prow CI | Minikube via `medyagh/setup-minikube` + BYOC |
-| CSI hostpath driver | canary tag, `SNAPSHOT_METADATA_TESTS=true` | `--enable-snapshot-metadata` flag | canary tag, `SNAPSHOT_METADATA_TESTS=true` |
-| Snapshot CRDs | external-snapshotter v8.1.0 | external-snapshotter v8.4.0 | external-snapshotter v8.4.0 |
-| Snapshot controller | v8.1.0, patched to `default` namespace | v8.4.0, standard deploy | v8.4.0 |
+| CSI hostpath driver | canary tag, `SNAPSHOT_METADATA_TESTS=true` | `--enable-snapshot-metadata` flag | v1.18.0 release, `SNAPSHOT_METADATA_TESTS=true` |
+| Snapshot CRDs | external-snapshotter v8.1.0 | external-snapshotter v8.4.0 | external-snapshotter v8.6.0 |
+| Snapshot controller | v8.1.0, patched to `default` namespace | v8.4.0, standard deploy | v8.6.0 |
 | TLS certificates | Pre-generated testdata in repo | Generated programmatically in Go test code | Script-generated (`scripts/generate-csi-certs.sh`) |
 | SnapshotMetadataService CRD | Installed from this repo | Installed from `test/e2e/testing-manifests/` | Installed from external-snapshot-metadata repo |
-| Sidecar image | Built from PR SHA (`${{ github.sha }}`) | `gcr.io/k8s-staging-sig-storage` test tag | `gcr.io/k8s-staging-sig-storage` test tag |
+| Sidecar image | Built from PR SHA (`${{ github.sha }}`) | `gcr.io/k8s-staging-sig-storage` test tag | `registry.k8s.io/sig-storage` v1.1.0 |
 | Service endpoint | `csi-snapshot-metadata.default:6443` | `csi-snapshot-metadata.<ns>:6443` | `csi-snapshot-metadata.default:6443` |
 
 **Assessment**: Infrastructure setup is closely aligned with both upstream suites. Snapshot CRDs
-now match kubernetes/kubernetes at v8.4.0.
+are at or ahead of kubernetes/kubernetes (v8.4.0 when compared; demo.yaml now v8.6.0).
 
 ## API Coverage Comparison
 

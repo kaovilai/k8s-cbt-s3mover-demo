@@ -77,7 +77,7 @@ jobs:
           driver: docker
           cpus: 4
           memory: 8192
-          kubernetes-version: v1.33.0
+          kubernetes-version: v1.36.5
           container-runtime: containerd
           addons: storage-provisioner,default-storageclass
 
@@ -109,18 +109,18 @@ jobs:
       - name: Install Snapshot CRDs
         run: |
           echo "Installing VolumeSnapshot CRDs..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
       - name: Deploy Snapshot Controller
         run: |
           echo "Deploying Snapshot Controller..."
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
-          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml
 
           echo "Waiting for snapshot-controller to be ready..."
           kubectl wait --for=condition=Available deployment/snapshot-controller -n kube-system --timeout=60s || {

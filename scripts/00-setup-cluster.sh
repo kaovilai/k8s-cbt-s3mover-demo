@@ -46,7 +46,7 @@ fi
 echo "  Driver: $DRIVER"
 echo "  CPUs: 4"
 echo "  Memory: 8192MB"
-echo "  Kubernetes: v1.33.0 (CBT alpha support)"
+echo "  Kubernetes: v1.36.5 (CBT beta support)"
 echo ""
 
 minikube start \
@@ -54,7 +54,7 @@ minikube start \
     --driver="$DRIVER" \
     --cpus=4 \
     --memory=8192 \
-    --kubernetes-version=v1.33.0 \
+    --kubernetes-version=v1.36.5 \
     --container-runtime=containerd \
     --wait=all
 

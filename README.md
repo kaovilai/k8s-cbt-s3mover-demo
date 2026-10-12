@@ -19,13 +19,13 @@ This demo showcases:
 - [Go](https://golang.org/) 1.22 or later (for building tools)
 - ~10GB free disk space
 
-**CBT Support**: Changed Block Tracking API is available as an alpha feature starting in **Kubernetes 1.33**. For full CBT functionality, use Kubernetes 1.33 or later.
+**CBT Support**: Changed Block Tracking API was introduced as an alpha feature in **Kubernetes 1.33** and graduated to **beta in Kubernetes 1.36** (KEP-3314). For full CBT functionality, use Kubernetes 1.33 or later; the demo scripts default to Kubernetes 1.36.
 
 ```bash
 # Verify prerequisites
-minikube version         # v1.36.0 or later recommended
+minikube version         # v1.39.0 or later recommended (Kubernetes 1.36 support)
 kubectl version --client # v1.28.0 or later
-go version               # 1.22 or later (optional, for building tools)
+go version               # 1.26 or later (optional, for building tools)
 df -h /tmp               # Need ~10GB free
 ```
 
@@ -167,7 +167,7 @@ This deploys (following upstream external-snapshot-metadata integration test pat
 
 **Key Features:**
 - ✅ TLS-secured gRPC endpoint (`csi-snapshot-metadata.default:6443`)
-- ✅ Uses upstream staging registry images (`gcr.io/k8s-staging-sig-storage`)
+- ✅ Uses upstream release images (`registry.k8s.io/sig-storage`: hostpathplugin v1.18.0, csi-snapshot-metadata v1.1.0)
 - ✅ Matches official external-snapshot-metadata integration tests
 
 ```bash
@@ -683,13 +683,13 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 
 ### CBT API Availability
 
-**Status**: Changed Block Tracking API was introduced as an **alpha feature in Kubernetes 1.33**.
+**Status**: Changed Block Tracking API was introduced as an **alpha feature in Kubernetes 1.33** and graduated to **beta in Kubernetes 1.36** (`SnapshotMetadataService` is `cbt.storage.k8s.io/v1beta1`; external-snapshot-metadata v1.x is beta).
 
 **Requirements**:
 - Kubernetes 1.33 or later
 - CSI driver that implements the SnapshotMetadata gRPC service
 - Block volumes (not filesystem volumes)
-- No feature gates required (alpha APIs available by default in 1.33+)
+- No feature gates required (APIs available by default in 1.33+)
 
 **Current Driver Support**:
 - ✅ **CSI hostpath driver**: Implements CBT SnapshotMetadata service
@@ -697,7 +697,7 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 - ✅ **Ceph CSI**: Full CBT implementation
 
 **Resources**:
-- [Kubernetes Blog: CBT Alpha Announcement](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
+- [Kubernetes Blog: CBT Alpha Announcement (1.33)](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
 - [KEP-3314: CSI Changed Block Tracking](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/3314-csi-changed-block-tracking/README.md)
 - [External Snapshot Metadata Sidecar](https://github.com/kubernetes-csi/external-snapshot-metadata)
 

@@ -207,7 +207,7 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
     echo "  Driver: $DRIVER"
     echo "  CPUs: 4"
     echo "  Memory: 8192MB"
-    echo "  Kubernetes: v1.33.0 (CBT alpha support)"
+    echo "  Kubernetes: v1.36.5 (CBT beta support)"
     echo ""
 
     minikube start \
@@ -215,7 +215,7 @@ if ! minikube status --profile cbt-demo >/dev/null 2>&1; then
         --driver="$DRIVER" \
         --cpus=4 \
         --memory=8192 \
-        --kubernetes-version=v1.33.0 \
+        --kubernetes-version=v1.36.5 \
         --container-runtime=containerd \
         --wait=all
 
@@ -248,17 +248,17 @@ if [[ "$CURRENT_DRIVER" == "podman" ]]; then
     echo "Recommended alternatives with CONFIRMED block device support:"
     echo "  1. vfkit (macOS 13+, Minikube 1.36+):"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
+    echo "     minikube start --driver=vfkit --cpus=4 --memory=8192 --kubernetes-version=v1.36.5"
     echo ""
     echo "  2. Docker Desktop:"
     echo "     Install from: https://www.docker.com/products/docker-desktop/"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
+    echo "     minikube start --driver=docker --cpus=4 --memory=8192 --kubernetes-version=v1.36.5"
     echo ""
     echo "  3. QEMU:"
     echo "     brew install qemu"
     echo "     minikube delete --profile cbt-demo"
-    echo "     minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.33.0"
+    echo "     minikube start --driver=qemu --cpus=4 --memory=8192 --kubernetes-version=v1.36.5"
     echo ""
     echo "  4. Cloud Cluster: Use EKS/GKE/AKS for production testing"
     echo ""
@@ -283,12 +283,12 @@ echo "Step 3: Installing VolumeSnapshot CRDs"
 echo "=========================================="
 
 echo "Installing VolumeSnapshot CRDs..."
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.4.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotclasses.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshotcontents.yaml
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.6.0/client/config/crd/groupsnapshot.storage.k8s.io_volumegroupsnapshots.yaml
 
 echo -e "${GREEN}✓ VolumeSnapshot CRDs installed${NC}"
 
@@ -372,7 +372,7 @@ echo "Your demo environment is ready with FULL block device support:"
 echo ""
 echo "Cluster:"
 echo "  • Minikube profile: cbt-demo"
-echo "  • Kubernetes: v1.33.0 (CBT alpha enabled)"
+echo "  • Kubernetes: v1.36.5 (CBT beta enabled)"
 echo "  • Driver: ${DRIVER:-$CURRENT_DRIVER}"
 echo "  • Context: cbt-demo"
 echo ""
