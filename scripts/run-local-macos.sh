@@ -34,15 +34,12 @@ echo "K8s CBT Demo - macOS Local Setup"
 echo "=========================================="
 echo ""
 echo "This script will:"
-echo "  1. Check prerequisites (kind, kubectl, docker)"
-echo "  2. Create Kind cluster"
+echo "  1. Check prerequisites (minikube, kubectl, docker)"
+echo "  2. Start Minikube cluster"
 echo "  3. Deploy MinIO S3 storage"
 echo "  4. Deploy CSI driver with CBT"
 echo "  5. Deploy block-writer workload"
 echo "  6. Run demo workflow with snapshots"
-echo ""
-echo "⚠️  Note: This uses Kind with filesystem PVCs (not block mode)"
-echo "    For full block device testing, use minikube or cloud providers."
 echo ""
 if [ "$NON_INTERACTIVE" = false ]; then
     read -r -p "Press Enter to continue or Ctrl+C to cancel..."
@@ -59,8 +56,8 @@ check_version() {
     local current_version
 
     case $cmd in
-        kind)
-            current_version=$(kind version 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/v//')
+        minikube)
+            current_version=$(minikube version --short 2>&1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/v//')
             ;;
         kubectl)
             current_version=$(kubectl version --client -o json 2>/dev/null | grep -oE '"gitVersion":"v[0-9]+\.[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
@@ -115,14 +112,14 @@ else
     MISSING_DEPS=1
 fi
 
-# Check kind
-echo -n "Checking kind... "
-if command_exists kind; then
-    KIND_VERSION=$(check_version kind)
-    echo -e "${GREEN}✓${NC} Found version $KIND_VERSION"
+# Check minikube
+echo -n "Checking minikube... "
+if command_exists minikube; then
+    MINIKUBE_VERSION=$(check_version minikube)
+    echo -e "${GREEN}✓${NC} Found version $MINIKUBE_VERSION"
 else
     echo -e "${RED}✗${NC} Not found"
-    echo "  Install with: brew install kind"
+    echo "  Install with: brew install minikube"
     MISSING_DEPS=1
 fi
 
@@ -155,7 +152,7 @@ cd "$REPO_ROOT"
 # Step 2: Setup cluster
 echo ""
 echo "=========================================="
-echo "Step 2: Setting up Kind Cluster"
+echo "Step 2: Setting up Minikube Cluster"
 echo "=========================================="
 
 if ./scripts/00-setup-cluster.sh; then
@@ -166,7 +163,7 @@ else
 fi
 
 # Switch to the cluster context
-kubectl config use-context kind-cbt-demo
+kubectl config use-context cbt-demo
 
 # Step 3: Deploy CSI Driver
 echo ""
@@ -244,8 +241,8 @@ echo ""
 echo "Your demo environment is ready:"
 echo ""
 echo "Cluster:"
-echo "  • Kind cluster: cbt-demo"
-echo "  • Context: kind-cbt-demo"
+echo "  • Minikube cluster: cbt-demo"
+echo "  • Context: cbt-demo"
 echo ""
 echo "Services:"
 echo "  • MinIO Console: http://localhost:30901"
@@ -271,8 +268,7 @@ echo "Cleanup:"
 echo "  ./scripts/cleanup.sh"
 echo ""
 echo "⚠️  Important Notes:"
-echo "  • This demo uses filesystem PVCs (not block mode)"
-echo "  • Block devices don't work reliably in Kind"
-echo "  • For full CBT testing, use minikube or cloud providers"
-echo "  • See docs/MINIKUBE_VS_KIND.md for details"
+echo "  • This demo uses block-mode PVCs (required for CBT)"
+echo "  • Requires Minikube with vfkit, Docker, or QEMU driver"
+echo "  • See README.md for supported driver options"
 echo ""
