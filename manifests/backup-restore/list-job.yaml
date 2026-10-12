@@ -18,6 +18,9 @@ spec:
         app.kubernetes.io/component: list
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       restartPolicy: Never
       containers:
       - name: list

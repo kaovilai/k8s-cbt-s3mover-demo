@@ -11,6 +11,9 @@ metadata:
 spec:
   restartPolicy: Never
   serviceAccountName: csi-client-sa
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
   initContainers:
   - name: install-client
     image: golang:1.26-alpine

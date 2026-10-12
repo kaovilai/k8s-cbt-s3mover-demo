@@ -22,6 +22,9 @@ spec:
         app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: minio
         # quay.io/minio/minio and Docker Hub minio/minio no longer allow anonymous pulls
