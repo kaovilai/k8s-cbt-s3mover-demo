@@ -70,6 +70,10 @@ spec:
             memory: "1Gi"
             cpu: "1000m"
         securityContext:
+          # The Chainguard image defaults to a non-root user, which cannot write
+          # to the root-owned hostpath CSI volume (the previous image ran as root)
+          runAsUser: 0
+          runAsGroup: 0
           allowPrivilegeEscalation: false
       volumes:
       - name: storage
