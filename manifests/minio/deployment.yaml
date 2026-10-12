@@ -24,7 +24,9 @@ spec:
       automountServiceAccountToken: false
       containers:
       - name: minio
-        image: quay.io/minio/minio:RELEASE.2025-10-15T17-29-55Z
+        # quay.io/minio/minio and Docker Hub minio/minio no longer allow anonymous pulls
+        image: cgr.dev/chainguard/minio:latest
+        imagePullPolicy: IfNotPresent
         args:
         - server
         - /data
@@ -69,6 +71,10 @@ spec:
             memory: "1Gi"
             cpu: "1000m"
         securityContext:
+          # The Chainguard image defaults to a non-root user, which cannot write
+          # to the root-owned hostpath CSI volume (the previous image ran as root)
+          runAsUser: 0
+          runAsGroup: 0
           allowPrivilegeEscalation: false
       volumes:
       - name: storage
