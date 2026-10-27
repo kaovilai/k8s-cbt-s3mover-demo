@@ -51,6 +51,17 @@ docker build -t cbt-backup:latest .
   --namespace cbt-demo
 ```
 
+### Base Snapshot Requirement
+
+`--base-snapshot` must name a VolumeSnapshot that still exists in the cluster. The tool
+resolves that snapshot's CSI handle from the VolumeSnapshot and VolumeSnapshotContent at
+backup time; it does not store a handle for an already-deleted VolumeSnapshot.
+
+Drivers that compute deltas from the base snapshot (for example Ceph RBD, "Case 2" in the
+Velero block data mover design) fail `GetMetadataDelta` once the base is gone. The
+API-level CSI handle support from PR #180 removes the need for the VolumeSnapshot object
+in the API; it does not remove the driver's requirement that the snapshot itself exist.
+
 ### List Backups
 
 ```bash

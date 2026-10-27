@@ -446,6 +446,9 @@ jobs:
           echo "  - Snapshot 2: After inserting 100 additional rows (~10MB of changes)"
           echo ""
 
+          # block-snapshot-1 stays in the cluster for this run, so this test works on
+          # drivers that need the base snapshot (Ceph RBD, Velero "Case 2"). Velero
+          # 1.19.0 retention behavior is out of scope here; see README.md.
           echo "=========================================="
           echo "Demonstrating GetMetadataDelta API"
           echo "=========================================="
