@@ -713,50 +713,83 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 This section records the status agreed at the Velero community meeting on 2026-10-27. It
 describes Velero, not this demo; the demo keeps its base snapshot for the whole run.
 
-**Case 1 vs Case 2.** The block data mover design separates storage that does not need the
-base snapshot to compute a delta (Case 1, for example vSphere) from storage that does
-(Case 2, for example Ceph RBD). Velero 1.19.0 supports Case 1 only. Case 2 is not
-supported in 1.19.0. AWS EBS is not applicable because its CSI driver does not implement
-the SnapshotMetadata service.
+**Short version.** Case 1 = storage can work out changes without the old snapshot; Case 2
+= storage needs the old snapshot kept (for example, Ceph RBD). Velero 1.19.0 supports
+Case 1 only. On Case 2 it falls back to a full copy. A 1.19.x patch is being designed; it
+is targeted for OADP 1.7 (OpenShift's backup product, built on Velero), not committed.
 
-**Snapshot retention reverted.** Velero no longer reads the VolumeSnapshotClass
-`deletionPolicy`. Backup VolumeSnapshotContents always use `Delete`, restoring the Velero
-1.18 behavior. The class-inheritance part of
-[#10307](https://github.com/velero-io/velero/pull/10307) is being rolled back (Lyndon-Li is
-opening the rollback PR); the changeID fix from
-[#10294](https://github.com/velero-io/velero/pull/10294) stays.
+**Terms used below.** CBT (Changed Block Tracking) means the storage tells Velero which
+blocks changed. A base snapshot is the earlier snapshot the change is measured from. A
+delta is the set of changed blocks. The block data mover is the Velero component that
+copies block data.
 
-**Consequence for Ceph RBD on 1.19.0.** The base snapshot of each incremental is deleted,
-so `GetMetadataDelta` fails (ceph-csi returns `no snap source in omap`) and the block data
-mover falls back to a full, non-CBT backup (`fallbackFull`). Backup data remains correct;
-the incremental transfer benefit is lost. The file system data mover never retains
-snapshots.
+**Case 1 vs Case 2.**
+- Case 1: storage computes the delta without keeping the base snapshot (for example,
+  vSphere). Supported in 1.19.0.
+- Case 2: storage needs the base snapshot kept to compute the delta (for example, Ceph
+  RBD). Not supported in 1.19.0.
+
+AWS EBS is not applicable because its CSI driver does not implement the SnapshotMetadata
+service (the storage driver's changed-block API).
+
+**Snapshot retention: 1.19.0 always deletes.** 1.19.0 behaves like 1.18 (the previous
+release). Velero ignores the VolumeSnapshotClass `deletionPolicy` (the class setting for
+what happens to the storage snapshot when the cluster object is deleted). Velero always
+marks the backup's VolumeSnapshotContent (VSC, the cluster object that points at the
+storage snapshot) as `Delete`. After each backup, Velero deletes the backup's
+VolumeSnapshot; because the VSC says `Delete`, the storage erases the snapshot. Deleting a
+backup does the same. The change that would copy the class policy
+([#10307](https://github.com/velero-io/velero/pull/10307)) was merged to Velero's
+development branch (main) but was not in 1.19.0; it is being undone on main so the code
+matches 1.19.0's behavior. The fix that keeps the base-snapshot lookup working
+(the step that finds the previous snapshot)
+([#10294](https://github.com/velero-io/velero/pull/10294)) stays in place.
+
+**Consequence for Ceph RBD on 1.19.0.** The base snapshot is the previous backup's
+VolumeSnapshot, so the retention rule above deletes it. Ceph then cannot compute the
+delta, so `GetMetadataDelta` fails (ceph-csi returns `no snap source in omap`) and Velero
+copies the whole volume instead (`fallbackFull`). Backup data is still correct; the
+incremental saving is lost. The file system data mover never retains snapshots.
 
 **Case 2 design (proposal, not settled).** Tracked in
 [#10743](https://github.com/velero-io/velero/issues/10743), with the design in
-[#10744](https://github.com/velero-io/velero/issues/10744). The target is a 1.19.x patch.
-The current proposal:
+[#10744](https://github.com/velero-io/velero/issues/10744). Case 2 support was not ready
+for 1.19.0, so it is pushed to a 1.19.x patch targeted at OADP 1.7. It is delayed, not
+dropped, and not committed. The current proposal:
 
-- A volume policy parameter (working name `retainBaseSnapshot`) takes precedence over
-  automatic detection from `SnapshotMetadataService.spec.requireBaseSnapshotForDelta`,
-  which takes precedence over the default of not retaining.
-- Velero owns retention and does not consult the VolumeSnapshotClass `deletionPolicy`.
-- One snapshot is retained per volume chain. The previous one is deleted after the next
-  backup succeeds.
-- Deleting a backup also deletes the snapshot it retained.
+Decision order (first match wins):
 
-Timeline: CBT on Ceph is delayed, not dropped. It remains in the 1.19 stream (1.19.x) and
-is **targeted** for OADP 1.7. That target is not a commitment.
+1. the volume policy parameter, if an admin set it (a Velero setting; working name
+   `retainBaseSnapshot`). Use its value (keep or do not keep) and stop; ignore the driver
+   flag.
+2. the storage driver says "I need the old snapshot" with a flag on its
+   SnapshotMetadataService (`requireBaseSnapshotForDelta`), and Velero keeps the base.
+   - Catch: Velero cannot read this flag until
+     [#10722](https://github.com/velero-io/velero/issues/10722) lands (a 1.20 candidate),
+     so 1.19.x may have only the volume policy.
+3. none applies: do not keep it (it is deleted, as today).
 
-**Validated on Ceph RBD (retained base snapshot, pre-release builds):**
+Other rules in the proposal:
+
+- Same as 1.19.0: the VolumeSnapshotClass `deletionPolicy` plays no part. Velero's own
+  keep/delete order (steps 1-3) decides.
+- A volume chain (the series of snapshots of one volume) keeps only the newest snapshot.
+  That snapshot is the base for the next backup; once that backup succeeds, Velero
+  deletes the older one automatically.
+- When you delete a backup, Velero also deletes the snapshot it retained.
+
+If neither the volume policy nor the driver flag applies, the old snapshot is still
+deleted after each backup, as in 1.19.0, so Ceph still does a full copy.
+
+**Validated on Ceph RBD with pre-release builds that kept the base snapshot:**
 
 | Check | Result |
 |-------|--------|
-| True incremental on OCP + Rook and ODF | c2 delta was exactly 150,994,944 bytes |
+| True incremental on OpenShift (OCP) with Rook and with ODF (two ways to run Ceph on OpenShift) | Only changed blocks were sent: 150,994,944 bytes (144 MiB). No full-size number was recorded, so the saving cannot be quantified |
 | Restore integrity | Whole-device SHA-256 matched at every restore point |
 | KubeVirt | VM booted; multi-disk VM, including hotplug, matched checksums |
-| In-place incremental restore (`existingVolumeDataPolicy: incremental`) | 30 GiB volume: 270,532,608 bytes transferred in 22 s |
-| Negative test | Base deleted with a `Delete` class: `no snap source in omap`, then full fallback |
+| In-place incremental restore (`existingVolumeDataPolicy: incremental`; restore onto the existing volume instead of a new one) | 30 GiB volume: 270,532,608 bytes transferred in 22 s |
+| Negative test | Setup: the base snapshot was deleted after the backup (Velero always does this). Result: `no snap source in omap`, then full fallback |
 
 The negative test is the evidence for Case 2 and the basis for the design. These results
 were produced with a retained base snapshot on pre-release builds; they are not 1.19.0
@@ -764,24 +797,38 @@ behavior as shipped.
 
 **Related work.**
 
+All PR numbers below are in `velero-io/velero` unless the link says otherwise. The list is
+context: none of these items changes the 1.19.0 Case 1 / Case 2 status.
+
 - [external-snapshot-metadata#258](https://github.com/kubernetes-csi/external-snapshot-metadata/pull/258)
   merged the `requireBaseSnapshotForDelta` field; it is not in a release yet.
 - [ceph-csi#6680](https://github.com/ceph/ceph-csi/issues/6680) asks RBD to set the field.
 - [velero#10722](https://github.com/velero-io/velero/issues/10722) proposes that Velero
   read it. It is currently a 1.20 candidate, after the 1.19.x design.
-- Merged Velero PRs: #10698 (BLKZEROOUT ioctl), #10696 (design case order), #10700
-  (kopia snapshot not found after an interrupted deletion).
-- Open Velero PRs: #10699 (in-place restore baseline snapshot leak), #10708 (interrupted
-  source VSC), #10710 (failed backup VS cleanup), #10718 (docs), #10740 (parallel
-  upload/download control; on a 96 vCPU node the default still OOMs the data mover pod
-  with `GOMAXPROCS=96`; a 2/8/16 CPU limit peaked at 384/690/928 MiB and passed, using the
-  node-agent `podResources` ConfigMap).
+- Merged Velero PRs: #10698 (fix: zero block ranges on restore), #10696 (docs: swap the
+  two case descriptions), #10700 (fix: retry after an interrupted backup deletion).
+- Open Velero PRs: #10699 (fix: in-place restore leaked a base snapshot), #10708 (fix:
+  clean up the source VSC when the snapshot step is interrupted), #10710 (fix: clean up a
+  failed backup's VolumeSnapshot), #10718 (docs).
+- Open Velero PR #10740 adds parallel upload/download control. It is not in 1.19.0, so
+  1.19.0 users are not affected.
+  - Only if you test this PR: on a 96 vCPU node with its defaults, the data mover pod
+    runs out of memory (OOM) and is killed. The default run's peak memory was not
+    recorded, and the pod's memory limit is not known. The data mover is a Go program; it
+    sizes its parallel work from the node's CPU count (96 here; `GOMAXPROCS=96`), so
+    memory use grows.
+  - Workaround: the cluster admin sets `cpu` in the `podResources` ConfigMap of the
+    node-agent (the Velero pod on each node that runs the data mover). Set `cpu` to a
+    small number, e.g. 2. Pod memory used: CPU limit 2 -> 384 MiB, 8 -> 690 MiB, 16 ->
+    928 MiB. Lower CPU limit = fewer parallel jobs = less memory.
 - #10691 (delete retained snapshots) is a draft and the candidate implementation for
-  #10744. #10716 is closed and superseded by the rollback.
+  #10744. #10716 is closed and superseded by the revert of #10307 (revert PR number not
+  available yet).
 
-**OCP note.** With Rook / ceph-csi-operator, set `enableSeLinuxHostMount: true` on the
-node plugin. Without it, RBD Filesystem volumes mount without the expected SELinux label
-(`unlabeled_t`) and confined pods get EACCES
+**OCP note.** With Rook / ceph-csi-operator on OpenShift (OCP), set
+`enableSeLinuxHostMount: true` on the node plugin. Without it, RBD Filesystem volumes
+mount without the expected SELinux label (`unlabeled_t`), and pods using the volume get a
+permission-denied error (EACCES)
 ([ceph-csi#6679](https://github.com/ceph/ceph-csi/issues/6679)). Docs:
 [ceph-csi-operator#649](https://github.com/ceph/ceph-csi-operator/pull/649),
 [rook#18636](https://github.com/rook/rook/pull/18636).
