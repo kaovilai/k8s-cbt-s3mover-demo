@@ -222,6 +222,13 @@ func (w *Writer) Close() error {
 
 // WriteBlock writes a block at the given offset
 func (w *Writer) WriteBlock(block *BlockData) error {
+	if block.Offset < 0 {
+		return fmt.Errorf("invalid negative offset %d", block.Offset)
+	}
+	if block.Size != int64(len(block.Data)) {
+		return fmt.Errorf("block size mismatch at offset %d: metadata says %d bytes, data has %d", block.Offset, block.Size, len(block.Data))
+	}
+
 	// Seek to offset
 	_, err := w.device.Seek(block.Offset, io.SeekStart)
 	if err != nil {

@@ -69,21 +69,21 @@ type RestoreManifest struct {
 
 // BackupStats holds statistics about a backup operation
 type BackupStats struct {
-	StartTime         time.Time     `json:"startTime"`
-	EndTime           time.Time     `json:"endTime"`
-	Duration          time.Duration `json:"duration"`
-	BytesRead         int64         `json:"bytesRead"`
-	BytesUploaded     int64         `json:"bytesUploaded"`
-	BlocksRead        int           `json:"blocksRead"`
-	BlocksUploaded    int           `json:"blocksUploaded"`
-	BlocksSkipped     int           `json:"blocksSkipped"`     // For incremental
-	CompressionRatio  float64       `json:"compressionRatio"`  // If compression used
-	AverageBlockSize  int64         `json:"averageBlockSize"`
-	UploadThroughput  float64       `json:"uploadThroughput"`  // MB/s
-	IsIncremental     bool          `json:"isIncremental"`
-	BaseSnapshotName  string        `json:"baseSnapshotName,omitempty"`
-	CBTEnabled        bool          `json:"cbtEnabled"`
-	Errors            []string      `json:"errors,omitempty"`
+	StartTime        time.Time     `json:"startTime"`
+	EndTime          time.Time     `json:"endTime"`
+	Duration         time.Duration `json:"duration"`
+	BytesRead        int64         `json:"bytesRead"`
+	BytesUploaded    int64         `json:"bytesUploaded"`
+	BlocksRead       int           `json:"blocksRead"`
+	BlocksUploaded   int           `json:"blocksUploaded"`
+	BlocksSkipped    int           `json:"blocksSkipped"`    // For incremental
+	CompressionRatio float64       `json:"compressionRatio"` // If compression used
+	AverageBlockSize int64         `json:"averageBlockSize"`
+	UploadThroughput float64       `json:"uploadThroughput"` // MB/s
+	IsIncremental    bool          `json:"isIncremental"`
+	BaseSnapshotName string        `json:"baseSnapshotName,omitempty"`
+	CBTEnabled       bool          `json:"cbtEnabled"`
+	Errors           []string      `json:"errors,omitempty"`
 }
 
 // RestoreStats holds statistics about a restore operation

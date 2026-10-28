@@ -286,6 +286,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to download block at offset %d from %s: %w", blockMeta.Offset, snap, err)
 			}
+			if int64(len(blockData)) != blockMeta.Size {
+				return fmt.Errorf("block at offset %d in snapshot %s has %d bytes, expected %d", blockMeta.Offset, snap, len(blockData), blockMeta.Size)
+			}
 
 			stats.BytesDownloaded += int64(len(blockData))
 			stats.BlocksDownloaded++

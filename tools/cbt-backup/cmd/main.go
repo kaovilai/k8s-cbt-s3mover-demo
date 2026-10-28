@@ -18,18 +18,18 @@ import (
 )
 
 var (
-	namespace         string
-	pvcName           string
-	snapshotName      string
-	baseSnapshotName  string
-	s3Endpoint        string
-	s3AccessKey       string
-	s3SecretKey       string
-	s3Bucket          string
-	s3UseSSL          bool
-	devicePath        string
-	blockSize         int64
-	kubeconfig        string
+	namespace          string
+	pvcName            string
+	snapshotName       string
+	baseSnapshotName   string
+	s3Endpoint         string
+	s3AccessKey        string
+	s3SecretKey        string
+	s3Bucket           string
+	s3UseSSL           bool
+	devicePath         string
+	blockSize          int64
+	kubeconfig         string
 	snapshotClass      string
 	cbtEndpoint        string
 	serviceAccountName string
@@ -291,6 +291,9 @@ func runBackup(cmd *cobra.Command, args []string) error {
 			blockData, err := reader.ReadBlock(blockMeta.Offset, blockMeta.Size)
 			if err != nil {
 				return fmt.Errorf("failed to read block at offset %d: %w", blockMeta.Offset, err)
+			}
+			if int64(len(blockData.Data)) != blockMeta.Size {
+				return fmt.Errorf("short read at offset %d: got %d bytes, expected %d", blockMeta.Offset, len(blockData.Data), blockMeta.Size)
 			}
 
 			blockPath := fmt.Sprintf("blocks/%s/block-%d-%d", snap.Name, blockMeta.Offset, blockMeta.Size)

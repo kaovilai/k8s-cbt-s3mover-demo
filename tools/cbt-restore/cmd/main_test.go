@@ -123,3 +123,61 @@ func TestWriteMultipleBlocks(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteBlockRejectsSizeMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	devicePath := filepath.Join(tmpDir, "test-device")
+
+	f, err := os.Create(devicePath)
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	if err := f.Truncate(4096); err != nil {
+		t.Fatalf("failed to truncate: %v", err)
+	}
+	f.Close()
+
+	writer, err := blocks.NewWriter(devicePath, blocks.DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	defer writer.Close()
+
+	bd := &blocks.BlockData{
+		Offset: 0,
+		Size:   8,
+		Data:   []byte("short"),
+	}
+	if err := writer.WriteBlock(bd); err == nil {
+		t.Fatal("expected size mismatch error, got nil")
+	}
+}
+
+func TestWriteBlockRejectsNegativeOffset(t *testing.T) {
+	tmpDir := t.TempDir()
+	devicePath := filepath.Join(tmpDir, "test-device")
+
+	f, err := os.Create(devicePath)
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	if err := f.Truncate(4096); err != nil {
+		t.Fatalf("failed to truncate: %v", err)
+	}
+	f.Close()
+
+	writer, err := blocks.NewWriter(devicePath, blocks.DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	defer writer.Close()
+
+	bd := &blocks.BlockData{
+		Offset: -1,
+		Size:   5,
+		Data:   []byte("AAAAA"),
+	}
+	if err := writer.WriteBlock(bd); err == nil {
+		t.Fatal("expected negative offset error, got nil")
+	}
+}
