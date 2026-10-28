@@ -794,10 +794,13 @@ node plugin. Without it, RBD Filesystem volumes mount without the expected SELin
 
 ### GitHub Actions CI
 
-**Status**: CI workflow runs successfully with the following caveats:
-- Block device tests require Minikube or cloud clusters
-- Full CBT metadata API tests are skipped pending CRD availability
-- Basic snapshot and MinIO integration tests pass
+**Status**: The workflow runs the full demo on Minikube, or on a remote
+cluster via BYOC:
+- Block device tests require Minikube or a cloud cluster
+- `GetMetadataAllocated`, `GetMetadataDelta`, and the upstream verifier run
+  when the CSI driver provides the SnapshotMetadata service
+- In-cluster backup, list, and restore Jobs run against MinIO; a failed backup
+  or restore Job fails the workflow
 
 **Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
 
