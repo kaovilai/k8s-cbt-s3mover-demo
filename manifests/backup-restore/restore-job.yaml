@@ -53,7 +53,9 @@ spec:
             memory: "512Mi"
             cpu: "500m"
         securityContext:
+          # The image defaults to UID 1000; raw block device nodes need root.
           privileged: true
+          runAsUser: 0
       volumes:
       - name: restore-volume
         persistentVolumeClaim:
