@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -231,5 +232,42 @@ func TestCheckDeviceSize(t *testing.T) {
 				t.Fatalf("checkDeviceSize(%d, %d) error = %v, wantErr %v", tt.deviceSize, tt.volumeSize, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestZeroRange(t *testing.T) {
+	tmpDir := t.TempDir()
+	devicePath := filepath.Join(tmpDir, "test-device")
+	if err := os.WriteFile(devicePath, bytes.Repeat([]byte{0xab}, 8192), 0o600); err != nil {
+		t.Fatalf("failed to write test device: %v", err)
+	}
+
+	writer, err := blocks.NewWriter(devicePath, blocks.DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	if err := writer.Zero(2048, 2048); err != nil {
+		t.Fatalf("Zero failed: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	data, err := os.ReadFile(devicePath)
+	if err != nil {
+		t.Fatalf("failed to read device: %v", err)
+	}
+	if len(data) != 8192 {
+		t.Fatalf("size mismatch: got %d, want 8192", len(data))
+	}
+
+	for i, b := range data {
+		want := byte(0xab)
+		if i >= 2048 && i < 4096 {
+			want = 0
+		}
+		if b != want {
+			t.Fatalf("byte %d = 0x%02x, want 0x%02x", i, b, want)
+		}
 	}
 }

@@ -57,6 +57,7 @@ type RestoreStats struct {
 	BytesWritten      int64         `json:"bytesWritten"`
 	BlocksDownloaded  int           `json:"blocksDownloaded"`
 	BlocksWritten     int           `json:"blocksWritten"`
+	BytesZeroed       int64         `json:"bytesZeroed,omitempty"`
 	SnapshotsApplied  int           `json:"snapshotsApplied"`
 	AverageBlockSize  int64         `json:"averageBlockSize"`
 	RestoreThroughput float64       `json:"restoreThroughput"`

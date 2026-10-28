@@ -25,6 +25,7 @@ var (
 	s3Bucket     string
 	s3UseSSL     bool
 	verify       bool
+	zeroDevice   bool
 )
 
 func main() {
@@ -51,6 +52,7 @@ incremental, all base snapshots are applied first in order.`,
 	restoreCmd.Flags().StringVarP(&snapshotName, "snapshot", "s", "", "Target snapshot name to restore (required)")
 	restoreCmd.Flags().StringVarP(&devicePath, "device", "d", "/dev/xvda", "Target block device path")
 	restoreCmd.Flags().BoolVar(&verify, "verify", true, "Verify block checksums during restore")
+	restoreCmd.Flags().BoolVar(&zeroDevice, "zero-device", false, "Zero the target volume before applying snapshots (use for in-place restores)")
 	addS3Flags(restoreCmd)
 	restoreCmd.MarkFlagRequired("snapshot")
 
@@ -254,11 +256,29 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("target device %s: %w", devicePath, err)
 	}
 
+	var zeroLength int64
+	if zeroDevice {
+		zeroLength = deviceSize
+		volumeSize := manifests[snapshotName].VolumeSize
+		if volumeSize > 0 && (zeroLength == 0 || zeroLength > volumeSize) {
+			zeroLength = volumeSize
+		}
+		if zeroLength <= 0 {
+			return fmt.Errorf("cannot determine how many bytes to zero on %s", devicePath)
+		}
+		fmt.Printf("Zeroing %d bytes on %s before restore...\n", zeroLength, devicePath)
+		if err := writer.Zero(0, zeroLength); err != nil {
+			return fmt.Errorf("failed to zero device: %w", err)
+		}
+		fmt.Println("✓ Target volume zeroed")
+	}
+
 	// Apply each snapshot in chain order
 	fmt.Println("\n[4/4] Applying snapshots...")
 
 	stats := metadata.RestoreStats{
-		StartTime: startTime,
+		StartTime:   startTime,
+		BytesZeroed: zeroLength,
 	}
 
 	for i, snap := range chain {
@@ -341,7 +361,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		stats.AverageBlockSize = stats.BytesWritten / int64(stats.BlocksWritten)
 	}
 	if stats.Duration.Seconds() > 0 {
-		stats.RestoreThroughput = float64(stats.BytesWritten) / (1024 * 1024) / stats.Duration.Seconds()
+		stats.RestoreThroughput = float64(stats.BytesWritten+stats.BytesZeroed) / (1024 * 1024) / stats.Duration.Seconds()
 	}
 
 	// Save restore stats to S3
@@ -359,6 +379,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Blocks Written:     %d\n", stats.BlocksWritten)
 	fmt.Printf("Data Downloaded:    %d bytes (%.2f MB)\n", stats.BytesDownloaded, float64(stats.BytesDownloaded)/(1024*1024))
 	fmt.Printf("Data Written:       %d bytes (%.2f MB)\n", stats.BytesWritten, float64(stats.BytesWritten)/(1024*1024))
+	if stats.BytesZeroed > 0 {
+		fmt.Printf("Zeroed:             %d bytes (%.2f MB)\n", stats.BytesZeroed, float64(stats.BytesZeroed)/(1024*1024))
+	}
 	fmt.Printf("Duration:           %s\n", stats.Duration)
 	fmt.Printf("Throughput:         %.2f MB/s\n", stats.RestoreThroughput)
 	if verify {

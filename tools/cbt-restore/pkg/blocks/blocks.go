@@ -12,6 +12,8 @@ const (
 	DefaultBlockSize = 1024 * 1024
 )
 
+var zeroChunk = make([]byte, DefaultBlockSize)
+
 // BlockMetadata describes a block's location
 type BlockMetadata struct {
 	Offset   int64  `json:"offset"`
@@ -71,6 +73,33 @@ func (w *Writer) Size() (int64, error) {
 		return 0, fmt.Errorf("failed to seek back to start: %w", err)
 	}
 	return size, nil
+}
+
+// Zero writes length zero bytes starting at offset and syncs the device.
+func (w *Writer) Zero(offset, length int64) error {
+	if offset < 0 || length < 0 {
+		return fmt.Errorf("invalid zero range: offset=%d length=%d", offset, length)
+	}
+	if _, err := w.device.Seek(offset, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to seek to offset %d: %w", offset, err)
+	}
+
+	for remaining := length; remaining > 0; {
+		n := int64(len(zeroChunk))
+		if remaining < n {
+			n = remaining
+		}
+		written, err := w.device.Write(zeroChunk[:int(n)])
+		if err != nil {
+			return fmt.Errorf("failed to zero at offset %d: %w", offset+length-remaining, err)
+		}
+		if int64(written) != n {
+			return fmt.Errorf("short zero write at offset %d: wrote %d bytes, expected %d", offset+length-remaining, written, n)
+		}
+		remaining -= n
+	}
+
+	return w.device.Sync()
 }
 
 // WriteBlock writes a block at the given offset

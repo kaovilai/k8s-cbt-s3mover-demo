@@ -303,6 +303,10 @@ kubectl get volumesnapshot,volumesnapshotcontent -n cbt-demo
 
    # Restore to a block device
    ./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda
+
+   # In-place restore: zero the volume extent first so unallocated blocks
+   # do not keep stale data from the previous use of the device
+   ./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda --zero-device
    ```
 
 ## 🔧 Tools

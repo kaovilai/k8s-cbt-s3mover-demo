@@ -39,6 +39,16 @@ docker build -t cbt-restore:latest .
   --device /dev/xvda
 ```
 
+For an in-place restore, zero the target volume first so blocks that were never
+allocated in the source do not keep stale data:
+
+```bash
+./cbt-restore restore \
+  --snapshot block-snapshot-2 \
+  --device /dev/xvda \
+  --zero-device
+```
+
 ### Plan a Restore (Dry Run)
 
 ```bash
@@ -59,6 +69,7 @@ docker build -t cbt-restore:latest .
 - `--snapshot, -s` (required): Target snapshot name to restore
 - `--device, -d`: Target block device path (default: `"/dev/xvda"`)
 - `--verify`: Verify block checksums during restore (default: `true`)
+- `--zero-device`: Zero the snapshot volume extent before applying blocks (default: `false`; use for in-place restores)
 
 ### `plan` flags
 
@@ -77,11 +88,13 @@ docker build -t cbt-restore:latest .
 1. Connect to S3-compatible storage.
 2. Resolve snapshot chain from target snapshot using `metadata/<snapshot>/manifest.json`.
 3. Open the destination block device for writing.
-4. For each snapshot in chain order:
+4. Optionally zero the snapshot volume extent (`--zero-device`) so unallocated
+   blocks do not keep data from a previous use of the device.
+5. For each snapshot in chain order:
    - Download `metadata/<snapshot>/blocks.json`
    - Download each block object from `blocks/<snapshot>/block-<offset>-<size>`
    - Write block data at the recorded offset
-5. Print restore summary and upload `metadata/<target>/restore-stats.json`.
+6. Print restore summary and upload `metadata/<target>/restore-stats.json`.
 
 ## Snapshot Chain Resolution
 
