@@ -64,5 +64,6 @@ type RestoreStats struct {
 	RestoreThroughput float64       `json:"restoreThroughput"`
 	ChecksumVerified  int           `json:"checksumVerified"`
 	ChecksumFailed    int           `json:"checksumFailed"`
+	WriteVerified     int           `json:"writeVerified,omitempty"`
 	Errors            []string      `json:"errors,omitempty"`
 }

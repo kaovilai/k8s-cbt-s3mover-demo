@@ -32,6 +32,7 @@ type BlockData struct {
 // Writer writes blocks to a device
 type Writer struct {
 	device    *os.File
+	readBack  *os.File
 	blockSize int64
 }
 
@@ -54,6 +55,10 @@ func NewWriter(devicePath string, blockSize int64) (*Writer, error) {
 
 // Close closes the block writer
 func (w *Writer) Close() error {
+	if w.readBack != nil {
+		_ = w.readBack.Close()
+		w.readBack = nil
+	}
 	if w.device != nil {
 		if err := w.device.Sync(); err != nil {
 			return fmt.Errorf("failed to sync device: %w", err)
@@ -61,6 +66,42 @@ func (w *Writer) Close() error {
 		return w.device.Close()
 	}
 	return nil
+}
+
+// EnableReadBack opens a second handle for reading written blocks back.
+func (w *Writer) EnableReadBack() error {
+	if w.readBack != nil {
+		return nil
+	}
+	f, err := os.Open(w.device.Name())
+	if err != nil {
+		return fmt.Errorf("failed to open device for read-back: %w", err)
+	}
+	w.readBack = f
+	return nil
+}
+
+// ReadBlock reads size bytes at offset using the read-back handle.
+func (w *Writer) ReadBlock(offset, size int64) ([]byte, error) {
+	if w.readBack == nil {
+		return nil, fmt.Errorf("read-back is not enabled")
+	}
+	if offset < 0 || size < 0 {
+		return nil, fmt.Errorf("invalid read-back range: offset=%d size=%d", offset, size)
+	}
+	if _, err := w.readBack.Seek(offset, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek to offset %d: %w", offset, err)
+	}
+
+	data := make([]byte, size)
+	n, err := io.ReadFull(w.readBack, data)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+		return nil, fmt.Errorf("failed to read back block at offset %d: %w", offset, err)
+	}
+	if int64(n) != size {
+		return nil, fmt.Errorf("short read-back at offset %d: got %d bytes, expected %d", offset, n, size)
+	}
+	return data, nil
 }
 
 // Size returns the size of the target device in bytes.

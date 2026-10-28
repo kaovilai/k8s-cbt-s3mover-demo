@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -269,5 +271,41 @@ func TestZeroRange(t *testing.T) {
 		if b != want {
 			t.Fatalf("byte %d = 0x%02x, want 0x%02x", i, b, want)
 		}
+	}
+}
+
+func TestVerifyWrittenBlock(t *testing.T) {
+	tmpDir := t.TempDir()
+	devicePath := filepath.Join(tmpDir, "test-device")
+
+	f, err := os.Create(devicePath)
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	data := []byte("hello, cbt")
+	if _, err := f.WriteAt(data, 0); err != nil {
+		t.Fatalf("failed to write data: %v", err)
+	}
+	if err := f.Truncate(4096); err != nil {
+		t.Fatalf("failed to truncate: %v", err)
+	}
+	f.Close()
+
+	writer, err := blocks.NewWriter(devicePath, blocks.DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	defer writer.Close()
+	if err := writer.EnableReadBack(); err != nil {
+		t.Fatalf("failed to enable read-back: %v", err)
+	}
+
+	sum := sha256.Sum256(data)
+	expected := fmt.Sprintf("%x", sum)
+	if err := verifyWrittenBlock(writer, 0, int64(len(data)), expected); err != nil {
+		t.Fatalf("verifyWrittenBlock failed for matching data: %v", err)
+	}
+	if err := verifyWrittenBlock(writer, 0, int64(len(data)), "wrong-checksum"); err == nil {
+		t.Fatal("expected checksum mismatch error, got nil")
 	}
 }

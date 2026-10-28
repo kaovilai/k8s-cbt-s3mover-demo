@@ -25,6 +25,7 @@ var (
 	s3Bucket     string
 	s3UseSSL     bool
 	verify       bool
+	verifyWrite  bool
 	zeroDevice   bool
 )
 
@@ -52,6 +53,7 @@ incremental, all base snapshots are applied first in order.`,
 	restoreCmd.Flags().StringVarP(&snapshotName, "snapshot", "s", "", "Target snapshot name to restore (required)")
 	restoreCmd.Flags().StringVarP(&devicePath, "device", "d", "/dev/xvda", "Target block device path")
 	restoreCmd.Flags().BoolVar(&verify, "verify", true, "Verify block checksums during restore")
+	restoreCmd.Flags().BoolVar(&verifyWrite, "verify-write", false, "Read each block back after writing and verify its checksum")
 	restoreCmd.Flags().BoolVar(&zeroDevice, "zero-device", false, "Zero the target volume before applying snapshots (use for in-place restores)")
 	addS3Flags(restoreCmd)
 	restoreCmd.MarkFlagRequired("snapshot")
@@ -252,6 +254,12 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	}
 	defer writer.Close()
 
+	if verifyWrite {
+		if err := writer.EnableReadBack(); err != nil {
+			return fmt.Errorf("failed to open device for read-back verification: %w", err)
+		}
+	}
+
 	deviceSize, err := writer.Size()
 	if err != nil {
 		fmt.Printf("Warning: could not determine target device size: %v\n", err)
@@ -341,6 +349,12 @@ func runRestore(cmd *cobra.Command, args []string) error {
 			if err := writer.WriteBlock(bd); err != nil {
 				return fmt.Errorf("failed to write block at offset %d: %w", blockMeta.Offset, err)
 			}
+			if verifyWrite {
+				if err := verifyWrittenBlock(writer, blockMeta.Offset, int64(len(blockData)), blockMeta.Checksum); err != nil {
+					return fmt.Errorf("write verification failed for block at offset %d in snapshot %s: %w", blockMeta.Offset, snap, err)
+				}
+				stats.WriteVerified++
+			}
 
 			stats.BytesWritten += int64(len(blockData))
 			stats.BlocksWritten++
@@ -390,6 +404,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	if verify {
 		fmt.Printf("Checksums Verified: %d\n", stats.ChecksumVerified)
 	}
+	if verifyWrite {
+		fmt.Printf("Write Read-Backs:   %d\n", stats.WriteVerified)
+	}
 	fmt.Println("========================================")
 	fmt.Println("Restore completed successfully!")
 
@@ -401,6 +418,19 @@ func runRestore(cmd *cobra.Command, args []string) error {
 func checkDeviceSize(deviceSize, volumeSize int64) error {
 	if volumeSize > 0 && deviceSize > 0 && deviceSize < volumeSize {
 		return fmt.Errorf("is %d bytes, smaller than the snapshot volume (%d bytes)", deviceSize, volumeSize)
+	}
+	return nil
+}
+
+// verifyWrittenBlock reads a block back from the device and compares its
+// checksum with the value recorded during backup.
+func verifyWrittenBlock(writer *blocks.Writer, offset, size int64, expected string) error {
+	data, err := writer.ReadBlock(offset, size)
+	if err != nil {
+		return err
+	}
+	if !blocks.VerifyChecksum(data, expected) {
+		return fmt.Errorf("checksum mismatch at offset %d", offset)
 	}
 	return nil
 }
