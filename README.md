@@ -644,7 +644,9 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 ### Block Device Support
 
-**Requirements**: This demo requires **block mode volumes** for Changed Block Tracking functionality.
+**Requirements**: This demo reads snapshots through a **block-mode PVC**. The
+source volume may be Filesystem or Block; `scripts/demo-fs-to-block.sh`
+demonstrates the Filesystem-to-Block path.
 
 **Supported Environments**:
 - ✅ **Minikube**: Full support (VM-based, used by upstream CI)
@@ -692,7 +694,8 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 **Requirements**:
 - Kubernetes 1.33 or later
 - CSI driver that implements the SnapshotMetadata gRPC service
-- Block volumes (not filesystem volumes)
+- A block device the backup tool can read; this demo restores snapshots into
+  block-mode PVCs, and the source volume may be Filesystem or Block
 - No feature gates required (APIs available by default in 1.33+)
 
 **Current Driver Support**:

@@ -75,6 +75,7 @@ echo ""
 echo "Checking for snapshot metadata sidecar..."
 if [[ "$STORAGE_CLASS" == "ocs-storagecluster-ceph-rbd" ]]; then
     echo "  Using Ceph RBD - snapshot metadata sidecar check not applicable"
+    echo "  CBT deltas require the base snapshot to exist (Velero Case 2)"
     echo "  CBT metadata support depends on the Ceph CSI driver version"
 else
     # Get all csi-hostpath pod names
