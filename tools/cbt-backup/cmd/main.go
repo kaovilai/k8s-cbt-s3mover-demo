@@ -33,6 +33,7 @@ var (
 	snapshotClass      string
 	cbtEndpoint        string
 	serviceAccountName string
+	metadataOnly       bool
 )
 
 func main() {
@@ -56,12 +57,13 @@ Supports full and incremental backups with block data upload to S3.`,
 	backupCmd.Flags().StringVarP(&snapshotName, "snapshot", "s", "", "Snapshot name (generated if not provided)")
 	backupCmd.Flags().StringVarP(&baseSnapshotName, "base-snapshot", "b", "", "Base snapshot for incremental backup")
 	addS3Flags(backupCmd)
-	backupCmd.Flags().StringVarP(&devicePath, "device", "d", "", "Block device path (auto-detected if not provided)")
+	backupCmd.Flags().StringVarP(&devicePath, "device", "d", "", "Block device path (required to upload block data)")
 	backupCmd.Flags().Int64Var(&blockSize, "block-size", blocks.DefaultBlockSize, "Block size in bytes")
 	backupCmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig (uses in-cluster config if not provided)")
 	backupCmd.Flags().StringVar(&snapshotClass, "snapshot-class", "csi-hostpath-snapclass", "VolumeSnapshotClass name")
 	backupCmd.Flags().StringVar(&cbtEndpoint, "cbt-endpoint", "", "CBT gRPC endpoint (overrides service discovery)")
 	backupCmd.Flags().StringVar(&serviceAccountName, "service-account", "cbt-backup-sa", "Service account name for CBT token auth")
+	backupCmd.Flags().BoolVar(&metadataOnly, "metadata-only", false, "Record CBT metadata without uploading block data (not restorable)")
 	backupCmd.MarkFlagRequired("pvc")
 
 	listCmd := &cobra.Command{
@@ -236,6 +238,14 @@ func runBackup(cmd *cobra.Command, args []string) error {
 			savingsPercent := 100.0 * (1.0 - float64(allocatedSize)/float64(manifest.VolumeSize))
 			fmt.Printf("Data transfer savings: %.2f%%\n", savingsPercent)
 		}
+	}
+
+	if len(blockList.Blocks) > 0 && devicePath == "" {
+		if !metadataOnly {
+			return fmt.Errorf("CBT returned %d blocks but --device is empty; pass --device to upload block data or --metadata-only to skip it", len(blockList.Blocks))
+		}
+		manifest.MetadataOnly = true
+		fmt.Println("⚠ Metadata-only backup: block data will not be uploaded")
 	}
 
 	manifest.TotalBlocks = len(blockList.Blocks)
@@ -437,6 +447,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Volume Size:   %d bytes\n", manifest.VolumeSize)
 		fmt.Printf("  Total Blocks:  %d\n", manifest.TotalBlocks)
 		fmt.Printf("  Total Size:    %d bytes\n", manifest.TotalSize)
+		if manifest.MetadataOnly {
+			fmt.Printf("  Metadata Only: true (not restorable)\n")
+		}
 		fmt.Println()
 	}
 

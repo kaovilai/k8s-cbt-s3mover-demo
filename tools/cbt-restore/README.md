@@ -62,6 +62,10 @@ allocated in the source do not keep stale data:
 ./cbt-restore list
 ```
 
+When running as a Kubernetes Job, the container needs privileged root access to
+the block device. The image itself keeps its non-root default (UID 1000). See
+[`manifests/backup-restore/restore-job.yaml`](../../manifests/backup-restore/restore-job.yaml).
+
 ## Command-Line Flags
 
 ### `restore` flags
@@ -69,6 +73,7 @@ allocated in the source do not keep stale data:
 - `--snapshot, -s` (required): Target snapshot name to restore
 - `--device, -d`: Target block device path (default: `"/dev/xvda"`)
 - `--verify`: Verify block checksums during restore (default: `true`)
+- `--verify-write`: Read each block back from the device after writing and verify its checksum (default: `false`)
 - `--zero-device`: Zero the snapshot volume extent before applying blocks (default: `false`; use for in-place restores)
 
 ### `plan` flags
@@ -94,6 +99,7 @@ allocated in the source do not keep stale data:
    - Download `metadata/<snapshot>/blocks.json`
    - Download each block object from `blocks/<snapshot>/block-<offset>-<size>`
    - Write block data at the recorded offset
+   - With `--verify-write`, read the block back and compare its checksum
 6. Print restore summary and upload `metadata/<target>/restore-stats.json`.
 
 ## Snapshot Chain Resolution

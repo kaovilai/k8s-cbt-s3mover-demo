@@ -20,7 +20,7 @@ EXIT_CODE=0
 
 # Check block-writer workload integrity
 echo "Checking block-writer workload..."
-if kubectl get pod -n "$NAMESPACE" -l app=block-writer &> /dev/null; then
+if [ -n "$(kubectl get pod -n "$NAMESPACE" -l app=block-writer --no-headers 2>/dev/null)" ]; then
     BLOCK_WRITER_POD=$(kubectl get pod -n "$NAMESPACE" -l app=block-writer -o jsonpath='{.items[0].metadata.name}')
 
     if [ -n "$BLOCK_WRITER_POD" ]; then
@@ -154,7 +154,7 @@ echo "S3 Backup Integrity Check"
 echo "=========================================="
 echo ""
 
-if kubectl get pod -n "$NAMESPACE" -l app=minio &> /dev/null; then
+if [ -n "$(kubectl get pod -n "$NAMESPACE" -l app=minio --no-headers 2>/dev/null)" ]; then
     MINIO_POD=$(kubectl get pod -n "$NAMESPACE" -l app=minio -o jsonpath='{.items[0].metadata.name}')
 
     if [ -n "$MINIO_POD" ]; then

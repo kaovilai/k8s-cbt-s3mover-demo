@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: tools/cbt-backup/go.mod
+          cache-dependency-path: tools/cbt-backup/go.sum
 
       - name: Download backup tool artifact
         uses: actions/download-artifact@v4
@@ -735,7 +736,7 @@ jobs:
 
           # Wait for job to complete
           echo "Waiting for backup job to complete..."
-          kubectl wait --for=condition=Complete job/cbt-backup -n cbt-demo --timeout=300s || {
+          kubectl wait --for=condition=Complete job/cbt-backup -n cbt-demo --timeout=660s || {
             echo "Backup job did not complete, checking status..."
             kubectl get job cbt-backup -n cbt-demo
             kubectl describe job cbt-backup -n cbt-demo
@@ -757,7 +758,7 @@ jobs:
           kubectl apply -f manifests/backup-restore/list-job.yaml
 
           echo "Waiting for list job to complete..."
-          kubectl wait --for=condition=Complete job/cbt-restore-list -n cbt-demo --timeout=120s || {
+          kubectl wait --for=condition=Complete job/cbt-restore-list -n cbt-demo --timeout=180s || {
             echo "List job did not complete"
             kubectl logs job/cbt-restore-list -n cbt-demo || true
             exit 1
@@ -799,7 +800,7 @@ jobs:
             kubectl apply -f -
 
           echo "Waiting for restore job to complete..."
-          kubectl wait --for=condition=Complete job/cbt-restore -n cbt-demo --timeout=300s || {
+          kubectl wait --for=condition=Complete job/cbt-restore -n cbt-demo --timeout=660s || {
             echo "Restore job did not complete"
             kubectl describe job cbt-restore -n cbt-demo
             kubectl logs job/cbt-restore -n cbt-demo || true
@@ -809,6 +810,66 @@ jobs:
           echo ""
           echo "Restore job logs:"
           kubectl logs job/cbt-restore -n cbt-demo || true
+
+          echo ""
+          echo "Verifying restored data matches the source device..."
+          kubectl apply -f - <<'EOF'
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: restore-verifier
+            namespace: cbt-demo
+            labels:
+              app.kubernetes.io/name: restore-verifier
+              app.kubernetes.io/component: verify
+              app.kubernetes.io/part-of: k8s-cbt-s3mover-demo
+          spec:
+            restartPolicy: Never
+            automountServiceAccountToken: false
+            containers:
+            - name: verify
+              image: busybox:1.37.0
+              imagePullPolicy: IfNotPresent
+              command:
+              - /bin/sh
+              - -c
+              - |
+                set -e
+                src=$(sha256sum /dev/xvda | awk '{print $1}')
+                dst=$(sha256sum /dev/xvdb | awk '{print $1}')
+                echo "source:   $src"
+                echo "restored: $dst"
+                [ "$src" = "$dst" ]
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  memory: "32Mi"
+                  cpu: "10m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"
+              volumeDevices:
+              - name: source
+                devicePath: /dev/xvda
+              - name: restored
+                devicePath: /dev/xvdb
+            volumes:
+            - name: source
+              persistentVolumeClaim:
+                claimName: block-writer-data
+            - name: restored
+              persistentVolumeClaim:
+                claimName: restored-data
+          EOF
+          kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/restore-verifier -n cbt-demo --timeout=300s || {
+            echo "Restored data does not match the source device"
+            kubectl logs restore-verifier -n cbt-demo || true
+            kubectl describe pod restore-verifier -n cbt-demo
+            exit 1
+          }
+          kubectl logs restore-verifier -n cbt-demo
+          kubectl delete pod restore-verifier -n cbt-demo --wait=true || true
 
           # Restart block-writer
           echo ""
@@ -918,6 +979,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: tools/cbt-backup/go.mod
+          cache-dependency-path: tools/cbt-backup/go.sum
 
       - name: Download dependencies
         working-directory: tools/cbt-backup
@@ -966,6 +1028,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: tools/cbt-restore/go.mod
+          cache-dependency-path: tools/cbt-restore/go.sum
 
       - name: Build restore tool
         run: |
@@ -1002,6 +1065,9 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: tools/cbt-backup/go.mod
+          cache-dependency-path: |
+            tools/cbt-backup/go.sum
+            tools/cbt-restore/go.sum
 
       - name: Run shellcheck
         uses: ludeeus/action-shellcheck@master
