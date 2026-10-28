@@ -220,6 +220,18 @@ func (w *Writer) Close() error {
 	return nil
 }
 
+// Size returns the size of the target device in bytes.
+func (w *Writer) Size() (int64, error) {
+	size, err := w.device.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get device size: %w", err)
+	}
+	if _, err := w.device.Seek(0, io.SeekStart); err != nil {
+		return 0, fmt.Errorf("failed to seek back to start: %w", err)
+	}
+	return size, nil
+}
+
 // WriteBlock writes a block at the given offset
 func (w *Writer) WriteBlock(block *BlockData) error {
 	if block.Offset < 0 {

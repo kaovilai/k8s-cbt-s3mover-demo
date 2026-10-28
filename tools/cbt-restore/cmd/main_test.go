@@ -181,3 +181,55 @@ func TestWriteBlockRejectsNegativeOffset(t *testing.T) {
 		t.Fatal("expected negative offset error, got nil")
 	}
 }
+
+func TestWriterSize(t *testing.T) {
+	tmpDir := t.TempDir()
+	devicePath := filepath.Join(tmpDir, "test-device")
+
+	f, err := os.Create(devicePath)
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	if err := f.Truncate(4096); err != nil {
+		t.Fatalf("failed to truncate: %v", err)
+	}
+	f.Close()
+
+	writer, err := blocks.NewWriter(devicePath, blocks.DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	defer writer.Close()
+
+	size, err := writer.Size()
+	if err != nil {
+		t.Fatalf("Size failed: %v", err)
+	}
+	if size != 4096 {
+		t.Errorf("size mismatch: got %d, want %d", size, 4096)
+	}
+}
+
+func TestCheckDeviceSize(t *testing.T) {
+	tests := []struct {
+		name       string
+		deviceSize int64
+		volumeSize int64
+		wantErr    bool
+	}{
+		{name: "device smaller than volume", deviceSize: 100, volumeSize: 200, wantErr: true},
+		{name: "device equals volume", deviceSize: 200, volumeSize: 200},
+		{name: "device larger than volume", deviceSize: 300, volumeSize: 200},
+		{name: "unknown volume size", deviceSize: 100, volumeSize: 0},
+		{name: "unknown device size", deviceSize: 0, volumeSize: 200},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkDeviceSize(tt.deviceSize, tt.volumeSize)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("checkDeviceSize(%d, %d) error = %v, wantErr %v", tt.deviceSize, tt.volumeSize, err, tt.wantErr)
+			}
+		})
+	}
+}

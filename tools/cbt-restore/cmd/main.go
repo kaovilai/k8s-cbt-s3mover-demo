@@ -247,6 +247,13 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	}
 	defer writer.Close()
 
+	deviceSize, err := writer.Size()
+	if err != nil {
+		fmt.Printf("Warning: could not determine target device size: %v\n", err)
+	} else if err := checkDeviceSize(deviceSize, manifests[snapshotName].VolumeSize); err != nil {
+		return fmt.Errorf("target device %s: %w", devicePath, err)
+	}
+
 	// Apply each snapshot in chain order
 	fmt.Println("\n[4/4] Applying snapshots...")
 
@@ -360,6 +367,15 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	fmt.Println("========================================")
 	fmt.Println("Restore completed successfully!")
 
+	return nil
+}
+
+// checkDeviceSize rejects a target smaller than the snapshot volume. A size of
+// zero means the size could not be determined and is not treated as an error.
+func checkDeviceSize(deviceSize, volumeSize int64) error {
+	if volumeSize > 0 && deviceSize > 0 && deviceSize < volumeSize {
+		return fmt.Errorf("is %d bytes, smaller than the snapshot volume (%d bytes)", deviceSize, volumeSize)
+	}
 	return nil
 }
 
