@@ -2,14 +2,36 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-restore/pkg/blocks"
+	"github.com/kaovilai/k8s-cbt-s3mover-demo/tools/cbt-restore/pkg/metadata"
 )
+
+type fakeManifestStore struct {
+	manifests map[string]*metadata.SnapshotManifest
+}
+
+func (f *fakeManifestStore) DownloadJSON(_ context.Context, objectPath string, target interface{}) error {
+	const prefix = "metadata/"
+	const suffix = "/manifest.json"
+	if !strings.HasPrefix(objectPath, prefix) || !strings.HasSuffix(objectPath, suffix) {
+		return fmt.Errorf("unexpected path %q", objectPath)
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(objectPath, prefix), suffix)
+	manifest, ok := f.manifests[name]
+	if !ok {
+		return fmt.Errorf("manifest %q not found", name)
+	}
+	*(target.(*metadata.SnapshotManifest)) = *manifest
+	return nil
+}
 
 func TestBlockWriteAndVerify(t *testing.T) {
 	// Create a temp file to simulate a block device
@@ -307,5 +329,66 @@ func TestVerifyWrittenBlock(t *testing.T) {
 	}
 	if err := verifyWrittenBlock(writer, 0, int64(len(data)), "wrong-checksum"); err == nil {
 		t.Fatal("expected checksum mismatch error, got nil")
+	}
+}
+
+func TestBuildSnapshotChain(t *testing.T) {
+	store := &fakeManifestStore{manifests: map[string]*metadata.SnapshotManifest{
+		"c1": {Name: "c1"},
+		"c2": {Name: "c2", IsIncremental: true, BaseSnapshotName: "c1"},
+		"c3": {Name: "c3", IsIncremental: true, BaseSnapshotName: "c2"},
+	}}
+
+	chain, manifests, err := buildSnapshotChain(context.Background(), store, "c3")
+	if err != nil {
+		t.Fatalf("buildSnapshotChain failed: %v", err)
+	}
+
+	want := []string{"c1", "c2", "c3"}
+	if len(chain) != len(want) {
+		t.Fatalf("chain length = %d, want %d", len(chain), len(want))
+	}
+	for i := range want {
+		if chain[i] != want[i] {
+			t.Errorf("chain[%d] = %q, want %q", i, chain[i], want[i])
+		}
+	}
+	if len(manifests) != len(want) {
+		t.Errorf("manifest count = %d, want %d", len(manifests), len(want))
+	}
+}
+
+func TestBuildSnapshotChainFullBackup(t *testing.T) {
+	store := &fakeManifestStore{manifests: map[string]*metadata.SnapshotManifest{
+		"c1": {Name: "c1"},
+	}}
+
+	chain, _, err := buildSnapshotChain(context.Background(), store, "c1")
+	if err != nil {
+		t.Fatalf("buildSnapshotChain failed: %v", err)
+	}
+	if len(chain) != 1 || chain[0] != "c1" {
+		t.Fatalf("chain = %v, want [c1]", chain)
+	}
+}
+
+func TestBuildSnapshotChainCycle(t *testing.T) {
+	store := &fakeManifestStore{manifests: map[string]*metadata.SnapshotManifest{
+		"a": {Name: "a", IsIncremental: true, BaseSnapshotName: "b"},
+		"b": {Name: "b", IsIncremental: true, BaseSnapshotName: "a"},
+	}}
+
+	if _, _, err := buildSnapshotChain(context.Background(), store, "a"); err == nil {
+		t.Fatal("expected cycle error, got nil")
+	}
+}
+
+func TestBuildSnapshotChainMissingBase(t *testing.T) {
+	store := &fakeManifestStore{manifests: map[string]*metadata.SnapshotManifest{
+		"c2": {Name: "c2", IsIncremental: true, BaseSnapshotName: "c1"},
+	}}
+
+	if _, _, err := buildSnapshotChain(context.Background(), store, "c2"); err == nil {
+		t.Fatal("expected missing base error, got nil")
 	}
 }

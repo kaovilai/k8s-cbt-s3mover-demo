@@ -105,7 +105,12 @@ func newS3Client() (*s3.Client, error) {
 
 // buildSnapshotChain resolves the full chain of snapshots needed to restore
 // the target snapshot. Returns snapshots in apply order (base first).
-func buildSnapshotChain(ctx context.Context, s3Client *s3.Client, target string) ([]string, map[string]*metadata.SnapshotManifest, error) {
+// manifestStore reads manifest.json objects from backup storage.
+type manifestStore interface {
+	DownloadJSON(ctx context.Context, objectPath string, target interface{}) error
+}
+
+func buildSnapshotChain(ctx context.Context, s3Client manifestStore, target string) ([]string, map[string]*metadata.SnapshotManifest, error) {
 	chain := []string{target}
 	manifests := make(map[string]*metadata.SnapshotManifest)
 	seen := map[string]bool{target: true}
