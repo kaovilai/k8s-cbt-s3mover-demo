@@ -740,8 +740,7 @@ jobs:
             kubectl get job cbt-backup -n cbt-demo
             kubectl describe job cbt-backup -n cbt-demo
             kubectl logs job/cbt-backup -n cbt-demo || true
-            echo ""
-            echo "⚠ Backup job failed - this may be expected if CBT gRPC is not reachable"
+            exit 1
           }
 
           echo ""
@@ -761,6 +760,7 @@ jobs:
           kubectl wait --for=condition=Complete job/cbt-restore-list -n cbt-demo --timeout=120s || {
             echo "List job did not complete"
             kubectl logs job/cbt-restore-list -n cbt-demo || true
+            exit 1
           }
 
           echo ""
@@ -777,8 +777,9 @@ jobs:
           # Get the actual snapshot name from the backup (auto-generated name)
           BACKUP_SNAPSHOT=$(kubectl logs job/cbt-backup -n cbt-demo | grep "Snapshot Name:" | awk '{print $NF}')
           if [ -z "$BACKUP_SNAPSHOT" ]; then
-            echo "Could not determine backup snapshot name from logs, skipping restore"
-            exit 0
+            echo "Could not determine backup snapshot name from logs"
+            kubectl logs job/cbt-backup -n cbt-demo
+            exit 1
           fi
           echo "Restoring from backup snapshot: $BACKUP_SNAPSHOT"
 
@@ -789,6 +790,7 @@ jobs:
           kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/restored-data -n cbt-demo --timeout=60s || {
             echo "Restore PVC not bound, checking status..."
             kubectl get pvc restored-data -n cbt-demo
+            exit 1
           }
 
           # Create restore job dynamically with the correct snapshot name
@@ -801,6 +803,7 @@ jobs:
             echo "Restore job did not complete"
             kubectl describe job cbt-restore -n cbt-demo
             kubectl logs job/cbt-restore -n cbt-demo || true
+            exit 1
           }
 
           echo ""
@@ -811,7 +814,11 @@ jobs:
           echo ""
           echo "Restarting block-writer..."
           kubectl apply -f manifests/workload/block-writer-pod.yaml
-          kubectl wait --for=condition=Ready pod/block-writer -n cbt-demo --timeout=120s || true
+          kubectl wait --for=condition=Ready pod/block-writer -n cbt-demo --timeout=120s || {
+            echo "block-writer did not become ready after restore"
+            kubectl describe pod block-writer -n cbt-demo
+            exit 1
+          }
 
       - name: Collect Logs on Failure
         if: failure()
@@ -915,15 +922,12 @@ jobs:
       - name: Download dependencies
         working-directory: tools/cbt-backup
         run: |
-          echo "Downloading Go dependencies and updating go.sum..."
-          go mod tidy
-
-          # Retry on failure (network issues)
-          if [ $? -ne 0 ]; then
+          echo "Downloading Go dependencies..."
+          go mod download || {
             echo "First attempt failed, retrying..."
             sleep 5
-            go mod tidy
-          fi
+            go mod download
+          }
 
       - name: Build backup tool
         working-directory: tools/cbt-backup
@@ -942,11 +946,7 @@ jobs:
         working-directory: tools/cbt-backup
         run: |
           echo "Running tests..."
-          go test -v ./... || {
-            echo "Note: Tests may fail if there are no test files yet"
-            echo "This is expected for a demo project"
-            exit 0
-          }
+          go test -v ./...
 
       - name: Upload backup tool artifact
         uses: actions/upload-artifact@v4
@@ -1010,10 +1010,25 @@ jobs:
           ignore_paths: '.git'
           severity: warning
 
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l tools/cbt-backup tools/cbt-restore)"
+          if [ -n "$unformatted" ]; then
+            echo "ERROR: these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Lint backup tool
         working-directory: tools/cbt-backup
         run: |
-          go fmt ./...
+          go mod download
+          go vet ./...
+
+      - name: Lint restore tool
+        working-directory: tools/cbt-restore
+        run: |
+          go mod download
           go vet ./...
 
   build-docker-images:
