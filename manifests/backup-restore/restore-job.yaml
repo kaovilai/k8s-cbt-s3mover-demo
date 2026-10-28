@@ -28,6 +28,7 @@ spec:
         - restore
         - --snapshot=block-snapshot-1
         - --device=/dev/xvda
+        - --verify-write
         - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
         - --s3-bucket=snapshots
         env:
@@ -52,7 +53,9 @@ spec:
             memory: "512Mi"
             cpu: "500m"
         securityContext:
+          # The image defaults to UID 1000; raw block device nodes need root.
           privileged: true
+          runAsUser: 0
       volumes:
       - name: restore-volume
         persistentVolumeClaim:

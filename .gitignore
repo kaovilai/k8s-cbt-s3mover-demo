@@ -19,6 +19,7 @@ vendor/
 node_modules/
 .npm/
 package-lock.json
+!demo/package-lock.json
 
 # Kubernetes
 *.kubeconfig

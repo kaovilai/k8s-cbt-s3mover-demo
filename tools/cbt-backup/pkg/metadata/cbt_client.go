@@ -228,9 +228,9 @@ func (c *CBTClient) GetAllocatedBlocks(ctx context.Context, snapshotName string)
 	}
 
 	req := &api.GetMetadataAllocatedRequest{
-		SecurityToken: c.securityToken,
-		Namespace:     c.namespace,
-		SnapshotName:  snapshotName,
+		SecurityToken:  c.securityToken,
+		Namespace:      c.namespace,
+		SnapshotName:   snapshotName,
 		StartingOffset: 0,
 		MaxResults:     0,
 	}

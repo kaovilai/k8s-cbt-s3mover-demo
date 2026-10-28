@@ -12,6 +12,7 @@ This presentation covers:
 - **Use Cases**: Full and incremental snapshot backups
 - **Security Model**: Authentication, authorization, and transport encryption
 - **CI/CD Pipeline**: Automated testing and validation
+- **Velero Status**: CBT and block data mover behavior as of 2026-10-27, including the Ceph RBD Case 2 fallback in 1.19.0
 
 ## Prerequisites
 

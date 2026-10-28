@@ -51,7 +51,7 @@ echo "S3 Storage Status (MinIO)"
 echo "=========================================="
 
 # Try to connect to MinIO and get bucket info
-if kubectl get pod -n "$NAMESPACE" -l app=minio &> /dev/null; then
+if [ -n "$(kubectl get pod -n "$NAMESPACE" -l app=minio --no-headers 2>/dev/null)" ]; then
     echo "MinIO pod status:"
     kubectl get pod -n "$NAMESPACE" -l app=minio
 

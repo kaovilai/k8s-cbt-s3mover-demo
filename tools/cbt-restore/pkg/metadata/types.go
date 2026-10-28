@@ -24,6 +24,7 @@ type SnapshotManifest struct {
 	VolumeMode        string    `json:"volumeMode"`
 	CSIDriver         string    `json:"csiDriver"`
 	SnapshotClassName string    `json:"snapshotClassName"`
+	MetadataOnly      bool      `json:"metadataOnly,omitempty"`
 }
 
 // BlockList contains the list of blocks in a snapshot
@@ -57,10 +58,12 @@ type RestoreStats struct {
 	BytesWritten      int64         `json:"bytesWritten"`
 	BlocksDownloaded  int           `json:"blocksDownloaded"`
 	BlocksWritten     int           `json:"blocksWritten"`
+	BytesZeroed       int64         `json:"bytesZeroed,omitempty"`
 	SnapshotsApplied  int           `json:"snapshotsApplied"`
 	AverageBlockSize  int64         `json:"averageBlockSize"`
 	RestoreThroughput float64       `json:"restoreThroughput"`
 	ChecksumVerified  int           `json:"checksumVerified"`
 	ChecksumFailed    int           `json:"checksumFailed"`
+	WriteVerified     int           `json:"writeVerified,omitempty"`
 	Errors            []string      `json:"errors,omitempty"`
 }

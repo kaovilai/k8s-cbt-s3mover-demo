@@ -170,3 +170,24 @@ writes, matching upstream behavior.
 | LOW | Add `oflag=direct` to dd commands | CLOSED | Matches upstream I/O pattern |
 | LOW | Test audience parameter | OPEN | Covers auth edge case |
 | LOW | Add `serviceaccounts/token` RBAC | ALREADY CLOSED | Required for verifier |
+
+## Velero Block Data Mover Retention (2026-10-27)
+
+This repository's CI does not depend on Velero's snapshot-retention behavior. Its
+incremental steps keep the base VolumeSnapshot (`block-snapshot-1`) in the cluster for the
+whole run, so `GetMetadataDelta` has the base it needs on both Case 1 and Case 2 storage.
+
+Velero 1.19.0 does not retain that base snapshot. It reverted to always using
+`deletionPolicy: Delete` for backup VolumeSnapshotContents; the class-inheritance part of
+[#10307](https://github.com/velero-io/velero/pull/10307) is being rolled back and the
+changeID fix ([#10294](https://github.com/velero-io/velero/pull/10294)) stays. On Ceph RBD,
+which needs the base snapshot, every incremental therefore falls back to a full backup
+(`fallbackFull`) with `no snap source in omap`. Case 1 storage (for example vSphere) is
+unaffected.
+
+The Ceph RBD results in the slides were validated with a retained base snapshot on
+pre-release builds. They describe pre-rollback behavior and are not 1.19.0 results as
+shipped. The replacement design
+([#10743](https://github.com/velero-io/velero/issues/10743) /
+[#10744](https://github.com/velero-io/velero/issues/10744)) will define the retention
+parameter; tests should not hardcode its name before the design is accepted.

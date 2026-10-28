@@ -190,3 +190,18 @@ func TestScanNonZeroBlocks_DefaultBlockSize(t *testing.T) {
 		t.Errorf("expected non-zero block at offset %d, got %d", DefaultBlockSize, blocks[0].Offset)
 	}
 }
+
+func TestWriteBlockRejectsSizeMismatch(t *testing.T) {
+	path := makeTestDevice(t, 4096)
+
+	w, err := NewWriter(path, DefaultBlockSize)
+	if err != nil {
+		t.Fatalf("NewWriter failed: %v", err)
+	}
+	defer w.Close()
+
+	err = w.WriteBlock(&BlockData{Offset: 0, Size: 8, Data: []byte("short")})
+	if err == nil {
+		t.Fatal("expected size mismatch error, got nil")
+	}
+}

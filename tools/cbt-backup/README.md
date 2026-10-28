@@ -51,6 +51,17 @@ docker build -t cbt-backup:latest .
   --namespace cbt-demo
 ```
 
+### Base Snapshot Requirement
+
+`--base-snapshot` must name a VolumeSnapshot that still exists in the cluster. The tool
+resolves that snapshot's CSI handle from the VolumeSnapshot and VolumeSnapshotContent at
+backup time; it does not store a handle for an already-deleted VolumeSnapshot.
+
+Drivers that compute deltas from the base snapshot (for example Ceph RBD, "Case 2" in the
+Velero block data mover design) fail `GetMetadataDelta` once the base is gone. The
+API-level CSI handle support from PR #180 removes the need for the VolumeSnapshot object
+in the API; it does not remove the driver's requirement that the snapshot itself exist.
+
 ### List Backups
 
 ```bash
@@ -73,10 +84,13 @@ docker build -t cbt-backup:latest .
 - `--pvc, -p`: PVC name to backup (required)
 - `--snapshot, -s`: Snapshot name (auto-generated if not provided)
 - `--base-snapshot, -b`: Base snapshot for incremental backup
-- `--device, -d`: Block device path (auto-detected if not provided)
+- `--device, -d`: Block device path; required to upload block data
+- `--metadata-only`: Record the CBT block list without uploading block data (the result is not restorable)
 - `--block-size`: Block size in bytes (default: 1048576 = 1MB)
 - `--kubeconfig`: Path to kubeconfig file
 - `--snapshot-class`: VolumeSnapshotClass name (default: "csi-hostpath-snapclass")
+- `--cbt-endpoint`: gRPC endpoint override (skips SnapshotMetadataService discovery)
+- `--service-account`: Service account used to request the CBT token (default: "cbt-backup-sa")
 
 ## S3 Storage Layout
 
@@ -135,6 +149,11 @@ s3://snapshots/
 ```
 
 ## Running in Kubernetes
+
+The Job must run privileged as root to open the raw block device. The image
+itself keeps its non-root default (UID 1000). See
+[`manifests/backup-restore/backup-job.yaml`](../../manifests/backup-restore/backup-job.yaml)
+for the working manifest.
 
 ```yaml
 apiVersion: batch/v1

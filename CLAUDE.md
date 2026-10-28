@@ -155,8 +155,8 @@ cd tools/cbt-backup
 
 Scripts are numbered for execution order:
 - `00-*`: Cluster setup (local or remote)
-- `01-*`: MinIO deployment
-- `02-*`: CSI driver deployment
+- `01-*`: CSI driver deployment
+- `02-*`: MinIO deployment
 - `03-*`: Workload deployment
 - `04-07-*`: Demo workflow steps (run, simulate disaster, restore, verify)
 - `run-*`: Automated full workflows
@@ -249,7 +249,10 @@ s3://snapshots/
 
 ### Block Mode Volumes
 
-CBT requires `volumeMode: Block` (not Filesystem). Check with:
+This demo reads snapshots through a block-mode PVC, so the backup workload and
+the snapshot reader use `volumeMode: Block`. The source volume itself may be
+either Block or Filesystem; `scripts/demo-fs-to-block.sh` demonstrates the
+Filesystem-to-Block path. Check with:
 ```bash
 kubectl get pvc -n cbt-demo -o yaml | grep volumeMode
 ```
@@ -385,8 +388,8 @@ The backup tool interacts with Kubernetes via:
 ## Known Issues and Limitations
 
 1. **CBT API Maturity**: Alpha in Kubernetes 1.33, beta in 1.36 (KEP-3314); requires Kubernetes 1.33+, no feature gates needed
-2. **CSI Driver Support**: Only CSI hostpath driver implements CBT; AWS EBS CSI does not yet support it
-3. **Block Mode Required**: Filesystem-mode volumes do not support CBT
+2. **CSI Driver Support**: CSI hostpath and Ceph RBD implement CBT; Ceph RBD deltas require the base snapshot to exist. AWS EBS CSI does not implement it
+3. **Block Mode Reader Required**: This demo reads snapshots through a block-mode PVC. The source volume may be Block or Filesystem
 4. **Backup Tool Status**: Complete — CBT APIs, metadata, and block data upload all functional
 5. **Restore Tool**: Complete — resolves snapshot chains, downloads blocks from S3, writes to device with checksum verification
 

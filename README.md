@@ -303,6 +303,10 @@ kubectl get volumesnapshot,volumesnapshotcontent -n cbt-demo
 
    # Restore to a block device
    ./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda
+
+   # In-place restore: zero the volume extent first so unallocated blocks
+   # do not keep stale data from the previous use of the device
+   ./cbt-restore restore --snapshot block-snapshot-2 --device /dev/xvda --zero-device
    ```
 
 ## 🔧 Tools
@@ -441,7 +445,7 @@ type BlockMetadata struct {
 - **October 2025**: PR [kubernetes-csi/external-snapshot-metadata#180](https://github.com/kubernetes-csi/external-snapshot-metadata/pull/180) changed `GetMetadataDelta` to use CSI snapshot handles instead of snapshot names for the base snapshot parameter
   - Field renamed: `base_snapshot_name` → `base_snapshot_id`
   - Client tools now support both `-p <name>` and `-P <csi-handle>` flags
-  - CSI handle approach is preferred for production use
+  - The CSI handle approach avoids depending on the VolumeSnapshot object; the driver may still require the snapshot itself (Case 2, for example Ceph RBD)
 
 ### Why Direct Block Device Access Is Required (Not Just `volumeMode: Block`)
 
@@ -640,7 +644,9 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 ### Block Device Support
 
-**Requirements**: This demo requires **block mode volumes** for Changed Block Tracking functionality.
+**Requirements**: This demo reads snapshots through a **block-mode PVC**. The
+source volume may be Filesystem or Block; `scripts/demo-fs-to-block.sh`
+demonstrates the Filesystem-to-Block path.
 
 **Supported Environments**:
 - ✅ **Minikube**: Full support (VM-based, used by upstream CI)
@@ -688,25 +694,115 @@ oc adm policy add-scc-to-user privileged -z default -n cbt-demo
 **Requirements**:
 - Kubernetes 1.33 or later
 - CSI driver that implements the SnapshotMetadata gRPC service
-- Block volumes (not filesystem volumes)
+- A block device the backup tool can read; this demo restores snapshots into
+  block-mode PVCs, and the source volume may be Filesystem or Block
 - No feature gates required (APIs available by default in 1.33+)
 
 **Current Driver Support**:
 - ✅ **CSI hostpath driver**: Implements CBT SnapshotMetadata service
 - ❌ **AWS EBS CSI driver**: Does not yet implement CBT (uses native EBS snapshots)
-- ✅ **Ceph CSI**: Full CBT implementation
+- ✅ **Ceph CSI (RBD)**: Implements CBT snapshot metadata. `GetMetadataDelta` requires the base snapshot to still exist (see the Velero status section below)
 
 **Resources**:
 - [Kubernetes Blog: CBT Alpha Announcement (1.33)](https://kubernetes.io/blog/2025/09/25/csi-changed-block-tracking/)
 - [KEP-3314: CSI Changed Block Tracking](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/3314-csi-changed-block-tracking/README.md)
 - [External Snapshot Metadata Sidecar](https://github.com/kubernetes-csi/external-snapshot-metadata)
 
+### Velero CBT / Block Data Mover Status (2026-10-27)
+
+This section records the status agreed at the Velero community meeting on 2026-10-27. It
+describes Velero, not this demo; the demo keeps its base snapshot for the whole run.
+
+**Case 1 vs Case 2.** The block data mover design separates storage that does not need the
+base snapshot to compute a delta (Case 1, for example vSphere) from storage that does
+(Case 2, for example Ceph RBD). Velero 1.19.0 supports Case 1 only. Case 2 is not
+supported in 1.19.0. AWS EBS is not applicable because its CSI driver does not implement
+the SnapshotMetadata service.
+
+**Snapshot retention reverted.** Velero no longer reads the VolumeSnapshotClass
+`deletionPolicy`. Backup VolumeSnapshotContents always use `Delete`, restoring the Velero
+1.18 behavior. The class-inheritance part of
+[#10307](https://github.com/velero-io/velero/pull/10307) is being rolled back (Lyndon-Li is
+opening the rollback PR); the changeID fix from
+[#10294](https://github.com/velero-io/velero/pull/10294) stays.
+
+**Consequence for Ceph RBD on 1.19.0.** The base snapshot of each incremental is deleted,
+so `GetMetadataDelta` fails (ceph-csi returns `no snap source in omap`) and the block data
+mover falls back to a full, non-CBT backup (`fallbackFull`). Backup data remains correct;
+the incremental transfer benefit is lost. The file system data mover never retains
+snapshots.
+
+**Case 2 design (proposal, not settled).** Tracked in
+[#10743](https://github.com/velero-io/velero/issues/10743), with the design in
+[#10744](https://github.com/velero-io/velero/issues/10744). The target is a 1.19.x patch.
+The current proposal:
+
+- A volume policy parameter (working name `retainBaseSnapshot`) takes precedence over
+  automatic detection from `SnapshotMetadataService.spec.requireBaseSnapshotForDelta`,
+  which takes precedence over the default of not retaining.
+- Velero owns retention and does not consult the VolumeSnapshotClass `deletionPolicy`.
+- One snapshot is retained per volume chain. The previous one is deleted after the next
+  backup succeeds.
+- Deleting a backup also deletes the snapshot it retained.
+
+Timeline: CBT on Ceph is delayed, not dropped. It remains in the 1.19 stream (1.19.x) and
+is **targeted** for OADP 1.7. That target is not a commitment.
+
+**Validated on Ceph RBD (retained base snapshot, pre-release builds):**
+
+| Check | Result |
+|-------|--------|
+| True incremental on OCP + Rook and ODF | c2 delta was exactly 150,994,944 bytes |
+| Restore integrity | Whole-device SHA-256 matched at every restore point |
+| KubeVirt | VM booted; multi-disk VM, including hotplug, matched checksums |
+| In-place incremental restore (`existingVolumeDataPolicy: incremental`) | 30 GiB volume: 270,532,608 bytes transferred in 22 s |
+| Negative test | Base deleted with a `Delete` class: `no snap source in omap`, then full fallback |
+
+The negative test is the evidence for Case 2 and the basis for the design. These results
+were produced with a retained base snapshot on pre-release builds; they are not 1.19.0
+behavior as shipped.
+
+**Related work.**
+
+- [external-snapshot-metadata#258](https://github.com/kubernetes-csi/external-snapshot-metadata/pull/258)
+  merged the `requireBaseSnapshotForDelta` field; it is not in a release yet.
+- [ceph-csi#6680](https://github.com/ceph/ceph-csi/issues/6680) asks RBD to set the field.
+- [velero#10722](https://github.com/velero-io/velero/issues/10722) proposes that Velero
+  read it. It is currently a 1.20 candidate, after the 1.19.x design.
+- Merged Velero PRs: #10698 (BLKZEROOUT ioctl), #10696 (design case order), #10700
+  (kopia snapshot not found after an interrupted deletion).
+- Open Velero PRs: #10699 (in-place restore baseline snapshot leak), #10708 (interrupted
+  source VSC), #10710 (failed backup VS cleanup), #10718 (docs), #10740 (parallel
+  upload/download control; on a 96 vCPU node the default still OOMs the data mover pod
+  with `GOMAXPROCS=96`; a 2/8/16 CPU limit peaked at 384/690/928 MiB and passed, using the
+  node-agent `podResources` ConfigMap).
+- #10691 (delete retained snapshots) is a draft and the candidate implementation for
+  #10744. #10716 is closed and superseded by the rollback.
+
+**OCP note.** With Rook / ceph-csi-operator, set `enableSeLinuxHostMount: true` on the
+node plugin. Without it, RBD Filesystem volumes mount without the expected SELinux label
+(`unlabeled_t`) and confined pods get EACCES
+([ceph-csi#6679](https://github.com/ceph/ceph-csi/issues/6679)). Docs:
+[ceph-csi-operator#649](https://github.com/ceph/ceph-csi-operator/pull/649),
+[rook#18636](https://github.com/rook/rook/pull/18636).
+
+**Sources.**
+
+- [KEP-3314, retention requirement](https://github.com/kubernetes/enhancements/blob/ea3e81a0d41dd3df7dae584ea584c31de56cd3cb/keps/sig-storage/3314-csi-changed-block-tracking/README.md#L956-L972)
+- [ceph-csi RBD metadata service](https://github.com/ceph/ceph-csi/blob/a930eb0a54cd0b3ee247286966a08777e2b9489b/internal/rbd/sms_controllerserver.go#L196-L210)
+- [Block data mover design, Case 1/2](https://github.com/velero-io/velero/blob/bcd162299f51c1dc9e9fa7e96bbc6af7483d5580/design/block-data-mover/block-data-mover.md#L361-L374)
+
 ### GitHub Actions CI
 
-**Status**: CI workflow runs successfully with the following caveats:
-- Block device tests require Minikube or cloud clusters
-- Full CBT metadata API tests are skipped pending CRD availability
-- Basic snapshot and MinIO integration tests pass
+**Status**: The workflow runs the full demo on Minikube, or on a remote
+cluster via BYOC:
+- Block device tests require Minikube or a cloud cluster
+- `GetMetadataAllocated`, `GetMetadataDelta`, and the upstream verifier run
+  when the CSI driver provides the SnapshotMetadata service
+- In-cluster backup, list, and restore Jobs run against MinIO; a failed backup
+  or restore Job fails the workflow
+- After restore, a verifier pod compares the source and restored block devices
+  by SHA-256
 
 **Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
 
@@ -840,7 +936,7 @@ To start fresh without deleting the cluster:
 - [ ] Parallel block uploads
 - [ ] Deduplication across snapshots
 - [ ] Support for multiple volumes
-- [ ] Integration with Velero
+- [ ] Integration with Velero (waits on the Case 2 retention design for Ceph RBD; see the status section above)
 - [ ] Prometheus metrics
 
 ## 📝 License
