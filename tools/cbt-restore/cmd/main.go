@@ -240,6 +240,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("  [%d] %s (%s, %d blocks)\n", i+1, snap, snapType, manifests[snap].TotalBlocks)
 	}
+	if manifests[snapshotName].MetadataOnly {
+		return fmt.Errorf("backup %s is metadata-only; no block data is available to restore", snapshotName)
+	}
 
 	// Open block device for writing
 	fmt.Printf("\n[3/4] Opening device %s for writing...\n", devicePath)

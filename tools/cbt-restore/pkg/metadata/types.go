@@ -24,6 +24,7 @@ type SnapshotManifest struct {
 	VolumeMode        string    `json:"volumeMode"`
 	CSIDriver         string    `json:"csiDriver"`
 	SnapshotClassName string    `json:"snapshotClassName"`
+	MetadataOnly      bool      `json:"metadataOnly,omitempty"`
 }
 
 // BlockList contains the list of blocks in a snapshot

@@ -84,10 +84,13 @@ in the API; it does not remove the driver's requirement that the snapshot itself
 - `--pvc, -p`: PVC name to backup (required)
 - `--snapshot, -s`: Snapshot name (auto-generated if not provided)
 - `--base-snapshot, -b`: Base snapshot for incremental backup
-- `--device, -d`: Block device path (auto-detected if not provided)
+- `--device, -d`: Block device path; required to upload block data
+- `--metadata-only`: Record the CBT block list without uploading block data (the result is not restorable)
 - `--block-size`: Block size in bytes (default: 1048576 = 1MB)
 - `--kubeconfig`: Path to kubeconfig file
 - `--snapshot-class`: VolumeSnapshotClass name (default: "csi-hostpath-snapclass")
+- `--cbt-endpoint`: gRPC endpoint override (skips SnapshotMetadataService discovery)
+- `--service-account`: Service account used to request the CBT token (default: "cbt-backup-sa")
 
 ## S3 Storage Layout
 
