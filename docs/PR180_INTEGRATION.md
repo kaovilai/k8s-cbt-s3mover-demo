@@ -66,17 +66,20 @@ Snapshot 1 (VolumeSnapshot + data) ────┐
 Snapshot 2 (VolumeSnapshot + data) ────┼─> Both must exist to compute delta
 ```
 
-**After**: Base snapshot can be deleted; only the CSI handle is needed
+**After (Case 1 storage)**: The VolumeSnapshot object can be deleted; the CSI handle is enough
 ```
 Snapshot 1 (deleted VolumeSnapshot, but CSI handle saved)
 Snapshot 2 (VolumeSnapshot + data)
          ↓
-Can still compute delta using saved CSI handle!
+Can still compute delta using the saved CSI handle
 ```
+
+**Case 2 storage** (for example Ceph RBD) still needs the snapshot itself. Deleting it
+makes `GetMetadataDelta` fail with `no snap source in omap`.
 
 ### 2. Cost Optimization
 
-You can now:
+On Case 1 storage you can now:
 - Delete old VolumeSnapshot objects to reduce Kubernetes API overhead
 - Keep only the CSI handles in your backup metadata
 - Still perform incremental backups using the handles
@@ -84,6 +87,22 @@ You can now:
 ### 3. Better Alignment with CSI Driver Implementation
 
 The CSI drivers work with snapshot handles internally. This API change makes the Kubernetes API consistent with the underlying CSI driver expectations.
+
+### 4. Driver Limitation (Case 2 Storage)
+
+PR #180 removes the need for the VolumeSnapshot object. It does not remove the driver's
+need for the snapshot itself.
+
+Ceph RBD computes the delta with `rbd diff` from the base snapshot and returns
+`no snap source in omap` when that snapshot is gone. This is "Case 2" in the Velero block
+data mover design. Because Velero 1.19.0 no longer retains backup snapshots, Ceph RBD
+incrementals fall back to a full backup on that release. See
+[README.md](../README.md#velero-cbt--block-data-mover-status-2026-10-27) for the current
+status and the design work in velero-io/velero#10743 and #10744.
+
+The backup tool in this repository has the same constraint: `--base-snapshot` must still
+exist as a VolumeSnapshot, because the tool resolves the CSI handle from the
+VolumeSnapshot/VolumeSnapshotContent at backup time.
 
 ## Client Tool Updates
 

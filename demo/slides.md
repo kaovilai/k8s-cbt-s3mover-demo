@@ -391,7 +391,7 @@ layout: default
 <v-clicks>
 
 1. **CSI Driver** with CBT
-   - hostpath (demo), Ceph RBD (production)
+   - hostpath (demo), Ceph RBD (production; delta needs the base retained)
    - SnapshotMetadata service
 
 2. **MinIO** S3 storage
@@ -570,7 +570,7 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 
 <div class="mt-3 p-3 bg-blue-900 bg-opacity-20 rounded text-sm">
 
-**PR #180: CSI Handle Support** (merged Oct 2025) — `GetMetadataDelta` accepts CSI snapshot handles instead of names. Base snapshot **can be deleted** after extracting handle. Backward compatible.
+**PR #180: CSI Handle Support** (merged Oct 2025) — `GetMetadataDelta` accepts CSI snapshot handles instead of names, so the API no longer needs the VolumeSnapshot object. The driver may still need the snapshot itself: Ceph RBD does (Case 2). Backward compatible.
 
 </div>
 
@@ -579,7 +579,8 @@ kubectl exec csi-client -- /tools/snapshot-metadata-lister \
 <!--
 - Write 100 more blocks to raw device to simulate data changes
 - Uses CSI handle approach (PR #180) instead of snapshot names
-- Key benefit: Base snapshot can be deleted after getting handle
+- API benefit: the VolumeSnapshot object is no longer required
+- Driver caveat: Ceph RBD still needs the base snapshot to exist for the delta
 - This is the key efficiency gain - only ~400KB delta vs full ~800KB
 -->
 
@@ -683,6 +684,191 @@ layout: default
 - Restore creates PVC from snapshot (native K8s restore)
 - Verify ensures data integrity with checksum comparison
 - Snapshots provide crash-consistent recovery points
+-->
+
+---
+layout: default
+---
+
+# Velero CBT Status (Oct 2026)
+
+**Velero 1.19.0 supports Case 1, not Case 2.**
+
+<div class="grid grid-cols-2 gap-6 mt-4">
+<div>
+
+<v-click>
+
+### Case 1: no base snapshot needed
+
+- The driver computes the delta without the base being present
+- Example: vSphere
+- Unchanged in 1.19.0
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+### Case 2: base snapshot required
+
+- `GetMetadataDelta` needs the base to still exist
+- Example: Ceph RBD
+- **Not supported in 1.19.0**
+
+</v-click>
+
+</div>
+</div>
+
+<v-click>
+
+<div class="mt-4 p-3 bg-yellow-900 bg-opacity-20 rounded text-sm">
+
+Retention reverted: Velero no longer reads the VolumeSnapshotClass `deletionPolicy`, so backup VolumeSnapshotContents always use `Delete` (1.18 behavior). The class-inheritance part of #10307 is being rolled back; the changeID fix (#10294) stays.
+
+</div>
+
+</v-click>
+
+<!--
+- Status agreed at the 2026-10-27 Velero community meeting
+- AWS EBS is not applicable: its CSI driver does not implement snapshot metadata
+- The file system data mover never retains snapshots
+- Keep this factual: Case 2 was designed, not shipped in 1.19.0
+-->
+
+---
+layout: default
+---
+
+# Ceph RBD on Velero 1.19.0
+
+<div class="grid grid-cols-2 gap-6">
+<div>
+
+<v-click>
+
+### What happens
+
+1. The backup retains no base snapshot
+2. The base is deleted with the `Delete` class
+3. `GetMetadataDelta` fails: `no snap source in omap`
+4. The block data mover falls back to a full backup (`fallbackFull`)
+
+</v-click>
+
+<v-click>
+
+<div class="mt-3 p-3 bg-green-900 bg-opacity-20 rounded text-sm">
+
+Backup data is still correct. The loss is incremental transfer, not integrity.
+
+</div>
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+### What is proven (base retained)
+
+- True incremental on OCP + Rook and ODF
+- c2 delta: exactly 150,994,944 bytes
+- Whole-device SHA-256 matched at every restore point
+- VM booted; multi-disk VM (including hotplug) checksums matched
+- In-place incremental restore (`existingVolumeDataPolicy: incremental`): 30 GiB, 270,532,608 bytes, 22 s
+
+</v-click>
+
+<v-click>
+
+<div class="mt-3 p-2 bg-blue-900 bg-opacity-20 rounded text-xs">
+
+Validated with a retained base snapshot on pre-release builds. These are not 1.19.0 results as shipped.
+
+</div>
+
+</v-click>
+
+</div>
+</div>
+
+<!--
+- The fallback is the evidence for Case 2: delete the base, lose the delta
+- Negative test: base deleted with a Delete class
+- Sources: KEP-3314, ceph-csi sms_controllerserver.go, block data mover design
+- Do not present these numbers as 1.19.0 behavior
+-->
+
+---
+layout: default
+---
+
+# Case 2 Design In Progress
+
+<div grid="~ cols-2 gap-8" class="text-sm">
+<div>
+
+<v-click>
+
+### Tracking
+
+- Umbrella: [#10743](https://github.com/velero-io/velero/issues/10743)
+- Design: [#10744](https://github.com/velero-io/velero/issues/10744)
+- Target: a 1.19.x patch
+
+</v-click>
+
+<v-click>
+
+### Proposal (not settled)
+
+- Volume policy parameter (working name `retainBaseSnapshot`)
+- Then auto-detect from the `requireBaseSnapshotForDelta` field
+- Default: do not retain
+- Velero owns retention; class `deletionPolicy` is ignored
+- One retained snapshot per chain; delete it after the next backup
+- Deleting a backup deletes its retained snapshot
+
+</v-click>
+
+</div>
+<div>
+
+<v-click>
+
+### Timeline
+
+- CBT on Ceph is delayed, not dropped
+- Still in the 1.19 stream (1.19.x)
+- **Targeted** for OADP 1.7, not committed
+
+</v-click>
+
+<v-click>
+
+### In flight
+
+- #10698, #10696, #10700 merged
+- #10699, #10708, #10710, #10718 open
+- #10691 draft (candidate for #10744)
+- #10716 closed; superseded by rollback
+
+</v-click>
+
+</div>
+</div>
+
+<!--
+- The parameter name is a working name; do not write it into tests yet
+- external-snapshot-metadata#258 merged the CRD field; it is not released
+- ceph-csi#6680 asks RBD to set the field; velero#10722 (issue) proposes reading it
+- Keep the OADP 1.7 statement as a target, not a commitment
 -->
 
 ---
@@ -1037,7 +1223,9 @@ layout: default
 
 **CSI Driver Support**
 - hostpath driver: Full CBT support (demo)
-- Production drivers (Ceph, EBS): **Coming soon**
+- Ceph RBD: CBT works; the delta needs the base snapshot retained
+- Velero 1.19.0: Ceph RBD incrementals fall back to full (Case 2 not supported)
+- AWS EBS: does not implement CBT
 
 **ARM64 Architecture**
 - grpc_health_probe: AMD64-only in upstream
@@ -1056,7 +1244,7 @@ layout: default
 
 <div class="mt-4 p-3 bg-green-900 bg-opacity-30 rounded text-sm">
 
-💡 **This demo is fully functional**: Real CBT API calls, block-level backup to S3, and restore — all running as in-cluster Jobs following the Velero pattern. Production CSI drivers will plug into the same workflow.
+💡 **This demo is fully functional**: Real CBT API calls, block-level backup to S3, and restore — all running as in-cluster Jobs following the Velero pattern. Velero's Ceph retention work is tracked in #10743 and #10744.
 
 </div>
 
@@ -1065,9 +1253,9 @@ layout: default
 <!--
 Status update:
 - LEFT: Everything that works end-to-end with real CBT data
-- RIGHT: Remaining items (mostly waiting on CSI driver vendors)
+- RIGHT: Driver and Velero limitations, stated as they are today
 - Key message: Demo is fully functional, not just infrastructure validation
-- Production CSI drivers will use the same workflow
+- Ceph RBD CBT works when the base snapshot is retained; Velero 1.19.0 does not retain it
 -->
 
 ---
@@ -1104,7 +1292,7 @@ Call to action:
 - Works on Minikube or any K8s cluster
 - All code is open source and documented
 - Point to README.md for details
-- Mention: Great way to learn CBT before production CSI drivers support it
+- Mention: a good way to learn the API before relying on CBT in production; driver support and retention rules differ
 -->
 
 ---
@@ -1137,6 +1325,8 @@ layout: default
 - 📋 [schema.proto](https://github.com/kubernetes-csi/external-snapshot-metadata/blob/main/proto/schema.proto) - gRPC API definitions
 - 💡 [snapshot-metadata-lister](https://github.com/kubernetes-csi/external-snapshot-metadata/tree/main/examples/snapshot-metadata-lister) example
 - 🔨 [csi-hostpath-driver](https://github.com/kubernetes-csi/csi-driver-host-path) with CBT
+- [Velero block data mover design](https://github.com/velero-io/velero/blob/main/design/block-data-mover/block-data-mover.md)
+- [Velero Case 2 tracking (#10743)](https://github.com/velero-io/velero/issues/10743)
 
 </v-click>
 
@@ -1159,7 +1349,7 @@ Resources and community:
 - Point to schema.proto for gRPC API definitions
 - snapshot-metadata-lister example shows how to use the APIs
 - Encourage joining SIG Storage and Data Protection Working Group
-- This is an active area - production CSI driver support coming soon
+- Drivers are shipping CBT support; retention semantics still differ by driver
 -->
 
 ---
@@ -1183,6 +1373,7 @@ Closing:
 - Common questions to anticipate:
   - When will production CSI drivers support CBT? (Vendor-dependent, ask your CSI provider)
   - Does this work with EBS/Azure Disk? (Not yet, but KEP-3314 enables it)
+  - Does Velero support Ceph CBT today? (Not in 1.19.0: Ceph RBD incrementals fall back to full. Case 2 design targets 1.19.x, targeted for OADP 1.7)
   - Is this production-ready? (Beta in K8s 1.36+, alpha since 1.33; API is v1beta1, CSI driver support needed)
   - How does this compare to cloud provider CBT? (Similar concept, K8s provides standardized API)
 - Provide contact info or repo link for follow-up questions

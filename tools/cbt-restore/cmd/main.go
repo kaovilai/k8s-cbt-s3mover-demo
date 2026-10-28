@@ -25,6 +25,8 @@ var (
 	s3Bucket     string
 	s3UseSSL     bool
 	verify       bool
+	verifyWrite  bool
+	zeroDevice   bool
 )
 
 func main() {
@@ -51,6 +53,8 @@ incremental, all base snapshots are applied first in order.`,
 	restoreCmd.Flags().StringVarP(&snapshotName, "snapshot", "s", "", "Target snapshot name to restore (required)")
 	restoreCmd.Flags().StringVarP(&devicePath, "device", "d", "/dev/xvda", "Target block device path")
 	restoreCmd.Flags().BoolVar(&verify, "verify", true, "Verify block checksums during restore")
+	restoreCmd.Flags().BoolVar(&verifyWrite, "verify-write", false, "Read each block back after writing and verify its checksum")
+	restoreCmd.Flags().BoolVar(&zeroDevice, "zero-device", false, "Zero the target volume before applying snapshots (use for in-place restores)")
 	addS3Flags(restoreCmd)
 	restoreCmd.MarkFlagRequired("snapshot")
 
@@ -101,7 +105,12 @@ func newS3Client() (*s3.Client, error) {
 
 // buildSnapshotChain resolves the full chain of snapshots needed to restore
 // the target snapshot. Returns snapshots in apply order (base first).
-func buildSnapshotChain(ctx context.Context, s3Client *s3.Client, target string) ([]string, map[string]*metadata.SnapshotManifest, error) {
+// manifestStore reads manifest.json objects from backup storage.
+type manifestStore interface {
+	DownloadJSON(ctx context.Context, objectPath string, target interface{}) error
+}
+
+func buildSnapshotChain(ctx context.Context, s3Client manifestStore, target string) ([]string, map[string]*metadata.SnapshotManifest, error) {
 	chain := []string{target}
 	manifests := make(map[string]*metadata.SnapshotManifest)
 	seen := map[string]bool{target: true}
@@ -238,6 +247,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("  [%d] %s (%s, %d blocks)\n", i+1, snap, snapType, manifests[snap].TotalBlocks)
 	}
+	if manifests[snapshotName].MetadataOnly {
+		return fmt.Errorf("backup %s is metadata-only; no block data is available to restore", snapshotName)
+	}
 
 	// Open block device for writing
 	fmt.Printf("\n[3/4] Opening device %s for writing...\n", devicePath)
@@ -247,11 +259,42 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	}
 	defer writer.Close()
 
+	if verifyWrite {
+		if err := writer.EnableReadBack(); err != nil {
+			return fmt.Errorf("failed to open device for read-back verification: %w", err)
+		}
+	}
+
+	deviceSize, err := writer.Size()
+	if err != nil {
+		fmt.Printf("Warning: could not determine target device size: %v\n", err)
+	} else if err := checkDeviceSize(deviceSize, manifests[snapshotName].VolumeSize); err != nil {
+		return fmt.Errorf("target device %s: %w", devicePath, err)
+	}
+
+	var zeroLength int64
+	if zeroDevice {
+		zeroLength = deviceSize
+		volumeSize := manifests[snapshotName].VolumeSize
+		if volumeSize > 0 && (zeroLength == 0 || zeroLength > volumeSize) {
+			zeroLength = volumeSize
+		}
+		if zeroLength <= 0 {
+			return fmt.Errorf("cannot determine how many bytes to zero on %s", devicePath)
+		}
+		fmt.Printf("Zeroing %d bytes on %s before restore...\n", zeroLength, devicePath)
+		if err := writer.Zero(0, zeroLength); err != nil {
+			return fmt.Errorf("failed to zero device: %w", err)
+		}
+		fmt.Println("✓ Target volume zeroed")
+	}
+
 	// Apply each snapshot in chain order
 	fmt.Println("\n[4/4] Applying snapshots...")
 
 	stats := metadata.RestoreStats{
-		StartTime: startTime,
+		StartTime:   startTime,
+		BytesZeroed: zeroLength,
 	}
 
 	for i, snap := range chain {
@@ -286,6 +329,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to download block at offset %d from %s: %w", blockMeta.Offset, snap, err)
 			}
+			if int64(len(blockData)) != blockMeta.Size {
+				return fmt.Errorf("block at offset %d in snapshot %s has %d bytes, expected %d", blockMeta.Offset, snap, len(blockData), blockMeta.Size)
+			}
 
 			stats.BytesDownloaded += int64(len(blockData))
 			stats.BlocksDownloaded++
@@ -307,6 +353,12 @@ func runRestore(cmd *cobra.Command, args []string) error {
 			}
 			if err := writer.WriteBlock(bd); err != nil {
 				return fmt.Errorf("failed to write block at offset %d: %w", blockMeta.Offset, err)
+			}
+			if verifyWrite {
+				if err := verifyWrittenBlock(writer, blockMeta.Offset, int64(len(blockData)), blockMeta.Checksum); err != nil {
+					return fmt.Errorf("write verification failed for block at offset %d in snapshot %s: %w", blockMeta.Offset, snap, err)
+				}
+				stats.WriteVerified++
 			}
 
 			stats.BytesWritten += int64(len(blockData))
@@ -331,7 +383,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		stats.AverageBlockSize = stats.BytesWritten / int64(stats.BlocksWritten)
 	}
 	if stats.Duration.Seconds() > 0 {
-		stats.RestoreThroughput = float64(stats.BytesWritten) / (1024 * 1024) / stats.Duration.Seconds()
+		stats.RestoreThroughput = float64(stats.BytesWritten+stats.BytesZeroed) / (1024 * 1024) / stats.Duration.Seconds()
 	}
 
 	// Save restore stats to S3
@@ -349,14 +401,42 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Blocks Written:     %d\n", stats.BlocksWritten)
 	fmt.Printf("Data Downloaded:    %d bytes (%.2f MB)\n", stats.BytesDownloaded, float64(stats.BytesDownloaded)/(1024*1024))
 	fmt.Printf("Data Written:       %d bytes (%.2f MB)\n", stats.BytesWritten, float64(stats.BytesWritten)/(1024*1024))
+	if stats.BytesZeroed > 0 {
+		fmt.Printf("Zeroed:             %d bytes (%.2f MB)\n", stats.BytesZeroed, float64(stats.BytesZeroed)/(1024*1024))
+	}
 	fmt.Printf("Duration:           %s\n", stats.Duration)
 	fmt.Printf("Throughput:         %.2f MB/s\n", stats.RestoreThroughput)
 	if verify {
 		fmt.Printf("Checksums Verified: %d\n", stats.ChecksumVerified)
 	}
+	if verifyWrite {
+		fmt.Printf("Write Read-Backs:   %d\n", stats.WriteVerified)
+	}
 	fmt.Println("========================================")
 	fmt.Println("Restore completed successfully!")
 
+	return nil
+}
+
+// checkDeviceSize rejects a target smaller than the snapshot volume. A size of
+// zero means the size could not be determined and is not treated as an error.
+func checkDeviceSize(deviceSize, volumeSize int64) error {
+	if volumeSize > 0 && deviceSize > 0 && deviceSize < volumeSize {
+		return fmt.Errorf("is %d bytes, smaller than the snapshot volume (%d bytes)", deviceSize, volumeSize)
+	}
+	return nil
+}
+
+// verifyWrittenBlock reads a block back from the device and compares its
+// checksum with the value recorded during backup.
+func verifyWrittenBlock(writer *blocks.Writer, offset, size int64, expected string) error {
+	data, err := writer.ReadBlock(offset, size)
+	if err != nil {
+		return err
+	}
+	if !blocks.VerifyChecksum(data, expected) {
+		return fmt.Errorf("checksum mismatch at offset %d", offset)
+	}
 	return nil
 }
 
@@ -417,6 +497,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Volume Size:   %d bytes\n", manifest.VolumeSize)
 		fmt.Printf("  Total Blocks:  %d\n", manifest.TotalBlocks)
 		fmt.Printf("  Total Size:    %d bytes\n", manifest.TotalSize)
+		if manifest.MetadataOnly {
+			fmt.Printf("  Metadata Only: true (not restorable)\n")
+		}
 		fmt.Println()
 	}
 
