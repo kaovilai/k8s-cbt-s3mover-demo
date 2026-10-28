@@ -447,6 +447,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Volume Size:   %d bytes\n", manifest.VolumeSize)
 		fmt.Printf("  Total Blocks:  %d\n", manifest.TotalBlocks)
 		fmt.Printf("  Total Size:    %d bytes\n", manifest.TotalSize)
+		if manifest.MetadataOnly {
+			fmt.Printf("  Metadata Only: true (not restorable)\n")
+		}
 		fmt.Println()
 	}
 
