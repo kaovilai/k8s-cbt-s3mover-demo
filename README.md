@@ -801,6 +801,8 @@ cluster via BYOC:
   when the CSI driver provides the SnapshotMetadata service
 - In-cluster backup, list, and restore Jobs run against MinIO; a failed backup
   or restore Job fails the workflow
+- After restore, a verifier pod compares the source and restored block devices
+  by SHA-256
 
 **Remote Cluster Support**: You can use a real Kubernetes cluster for full testing:
 

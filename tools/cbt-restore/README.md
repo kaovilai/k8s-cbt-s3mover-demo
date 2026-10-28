@@ -62,6 +62,10 @@ allocated in the source do not keep stale data:
 ./cbt-restore list
 ```
 
+When running as a Kubernetes Job, the container needs privileged root access to
+the block device. The image itself keeps its non-root default (UID 1000). See
+[`manifests/backup-restore/restore-job.yaml`](../../manifests/backup-restore/restore-job.yaml).
+
 ## Command-Line Flags
 
 ### `restore` flags

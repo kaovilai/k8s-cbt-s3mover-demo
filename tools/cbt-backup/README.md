@@ -150,6 +150,11 @@ s3://snapshots/
 
 ## Running in Kubernetes
 
+The Job must run privileged as root to open the raw block device. The image
+itself keeps its non-root default (UID 1000). See
+[`manifests/backup-restore/backup-job.yaml`](../../manifests/backup-restore/backup-job.yaml)
+for the working manifest.
+
 ```yaml
 apiVersion: batch/v1
 kind: Job
