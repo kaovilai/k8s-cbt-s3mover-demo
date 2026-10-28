@@ -28,6 +28,7 @@ spec:
         - restore
         - --snapshot=block-snapshot-1
         - --device=/dev/xvda
+        - --verify-write
         - --s3-endpoint=minio.cbt-demo.svc.cluster.local:9000
         - --s3-bucket=snapshots
         env:
