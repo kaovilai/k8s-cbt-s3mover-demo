@@ -701,6 +701,8 @@ layout: default
 
 <v-click>
 
+<div v-motion :initial="{ opacity: 0, scale: 0.8 }" :enter="{ opacity: 1, scale: 1, transition: { delay: 80 } }" class="inline-block px-2 py-1 rounded bg-green-600 text-white text-xs font-bold mb-2">WORKS</div>
+
 ### Case 1: no base snapshot needed
 
 - The storage driver computes the delta without the base being present
@@ -714,7 +716,7 @@ layout: default
 
 <v-click>
 
-<div class="inline-block px-2 py-1 rounded bg-red-600 text-white text-xs font-bold mb-2">NOT SUPPORTED</div>
+<div v-motion :initial="{ opacity: 0, scale: 0.8 }" :enter="{ opacity: 1, scale: 1, transition: { delay: 160 } }" class="inline-block px-2 py-1 rounded bg-red-600 text-white text-xs font-bold mb-2">NOT SUPPORTED</div>
 
 ### Case 2: base snapshot required
 
@@ -732,7 +734,7 @@ layout: default
 <div class="mt-4 p-3 bg-yellow-900 bg-opacity-20 rounded text-sm">
 
 <p><strong>1.19.0:</strong> backup snapshots are always deleted afterward (same as 1.18).</p>
-<p class="mt-1"><strong>#10307</strong> (copy the snapshot class's delete setting): being undone. <strong>#10294</strong> (fix for the change-tracking ID): stays.</p>
+<p class="mt-1"><strong>#10307</strong> (made Velero copy the snapshot class's delete setting): being undone. <strong>#10294</strong> (a separate change-tracking fix, not part of the rollback): stays.</p>
 
 </div>
 
@@ -760,9 +762,20 @@ layout: default
 
 <p class="mb-2">Base = the old snapshot we compare against. Velero deletes it, so the comparison fails, and Velero copies everything.</p>
 
-1. Velero keeps no base: the snapshot class is set to `Delete`
-2. `GetMetadataDelta` fails: `no snap source in omap` (Ceph's lookup table)
-3. Velero's data mover (the robot that copies disk blocks) falls back to a full copy (`fallbackFull`)
+<div class="space-y-2 mt-2">
+<div v-motion :initial="{ opacity: 0, x: -16 }" :enter="{ opacity: 1, x: 0, transition: { delay: 80 } }" class="flex items-start gap-2">
+<span class="shrink-0 w-5 h-5 rounded-full bg-slate-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+<span>Velero keeps no base: the snapshot class (the storage setting for snapshots) is set to <code>Delete</code></span>
+</div>
+<div v-motion :initial="{ opacity: 0, x: -16 }" :enter="{ opacity: 1, x: 0, transition: { delay: 160 } }" class="flex items-start gap-2">
+<span class="shrink-0 w-5 h-5 rounded-full bg-slate-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+<span><code>GetMetadataDelta</code> fails: <code>no snap source in omap</code> (Ceph's lookup table)</span>
+</div>
+<div v-motion :initial="{ opacity: 0, x: -16 }" :enter="{ opacity: 1, x: 0, transition: { delay: 240 } }" class="flex items-start gap-2">
+<span class="shrink-0 w-5 h-5 rounded-full bg-slate-600 text-white text-xs font-bold flex items-center justify-center">3</span>
+<span>Velero's data mover (the robot that copies disk blocks) falls back to a full copy (<code>fallbackFull</code>)</span>
+</div>
+</div>
 
 </v-click>
 
@@ -791,11 +804,11 @@ Validated with the base snapshot kept, on pre-release builds. These are not 1.19
 <v-click>
 
 <ul class="mt-2">
-<li>Only changed blocks were sent on Ceph storage on OpenShift (Rook and ODF setups)</li>
-<li>Second backup sent only 150,994,944 bytes</li>
-<li>Whole-disk checksum (SHA-256) matched at every restore point</li>
+<li>Only changed blocks were sent on OpenShift Ceph setups</li>
+<li>Second backup sent only 150,994,944 bytes (full-copy size not recorded)</li>
+<li>Whole-disk checksum (SHA-256) matched at every backup you can restore from</li>
 <li>VM booted; multi-disk VM (including hotplug, a disk added while running) matched checksums</li>
-<li>In-place restore (onto the existing disk): 30 GiB, 270,532,608 bytes sent, 22 s</li>
+<li>In-place restore (onto the existing disk): 30 GiB, 270,532,608 bytes sent (about 270 MB of the 30 GiB disk), 22 s</li>
 </ul>
 
 </v-click>
@@ -814,9 +827,11 @@ Validated with the base snapshot kept, on pre-release builds. These are not 1.19
 layout: default
 ---
 
-# Case 2 Design In Progress
+# Case 2 Design: How Retention Would Work
 
-<div grid="~ cols-2 gap-8" class="text-sm">
+<p class="text-base font-bold text-amber-800 dark:text-amber-200 !opacity-100">Proposal, not settled: this is a design in progress; working names may change.</p>
+
+<div grid="~ cols-2 gap-10" class="text-base">
 <div>
 
 <v-click>
@@ -831,12 +846,10 @@ layout: default
 
 <v-click>
 
-### Proposal (not settled)
+<h3 class="mt-4">How Velero decides whether to keep the base</h3>
 
-**How it picks**
-
-1. Volume policy `retainBaseSnapshot` (working name) says keep -> keep the base snapshot
-2. Else auto-detect from `requireBaseSnapshotForDelta`
+1. Volume policy says keep<br/><span class="text-sm opacity-75">(a Velero rule per volume; working name <code>retainBaseSnapshot</code>)</span>
+2. Else ask the storage driver: does it say it needs the base? (flag `requireBaseSnapshotForDelta`)
 3. Else default: do not keep
 
 </v-click>
@@ -846,31 +859,10 @@ layout: default
 
 <v-click>
 
-### Timeline
-
-- CBT on Ceph is delayed, not dropped
-- Aimed at a 1.19.x patch (OADP 1.7, Red Hat's Velero product), not committed
-
-</v-click>
-
-<v-click>
-
-### Snapshot rules
+<h3>Snapshot rules</h3>
 
 - Velero alone decides; the class delete setting (`deletionPolicy`) plays no part
-- A chain (base + follow-ups) keeps the newest snapshot
-- After the next backup, Velero deletes the older one; deleting a backup deletes its kept snapshot
-
-</v-click>
-
-<v-click>
-
-### In flight
-
-- <span class="text-green-600 font-bold">MERGED</span> #10698, #10696, #10700
-- <span class="text-yellow-600 font-bold">OPEN</span> #10699, #10708, #10710, #10718
-- <span class="text-blue-600 font-bold">DRAFT</span> #10691 (candidate for #10744)
-- <span class="text-red-600 font-bold">CLOSED</span> #10716 (superseded by the #10307 rollback)
+- A chain (base + follow-ups) keeps the newest; after the next backup, Velero deletes the older one, and deleting a backup deletes its kept snapshot
 
 </v-click>
 
@@ -881,6 +873,44 @@ layout: default
 - The parameter name is a working name; do not write it into tests yet
 - external-snapshot-metadata#258 merged the CRD field; it is not released
 - ceph-csi#6680 asks RBD to set the field; velero#10722 (issue) proposes reading it
+-->
+
+---
+layout: default
+---
+
+# Case 2 Design: Timeline & Status
+
+<p class="text-base font-bold text-amber-800 dark:text-amber-200 !opacity-100">Targets, not commitments.</p>
+
+<p class="mt-4 text-center text-xs opacity-60">Now → later</p>
+
+<div class="mt-2 flex items-center justify-center gap-4 text-base font-bold">
+<div v-motion :initial="{ opacity: 0, y: 10 }" :enter="{ opacity: 1, y: 0, transition: { delay: 80 } }" class="px-5 py-4 rounded bg-slate-600 text-white text-center leading-tight">1.19.0<br/><span class="text-xs font-normal">full copy</span></div>
+<span class="text-3xl opacity-40">→</span>
+<div v-motion :initial="{ opacity: 0, y: 10 }" :enter="{ opacity: 1, y: 0, transition: { delay: 160 } }" class="px-5 py-4 rounded bg-slate-500 text-white text-center leading-tight">1.19.x<br/><span class="text-xs font-normal">retention design (planned)</span></div>
+<span class="text-3xl opacity-40">→</span>
+<div v-motion :initial="{ opacity: 0, y: 10 }" :enter="{ opacity: 1, y: 0, transition: { delay: 240 } }" class="px-5 py-4 rounded border-2 border-dashed border-slate-400 text-slate-500 text-center leading-tight">OADP 1.7<br/><span class="text-xs font-normal">target, not committed</span></div>
+</div>
+
+<p class="mt-4 text-center text-sm opacity-75">CBT on Ceph is delayed, not dropped. OADP 1.7 = Red Hat's Velero product.</p>
+
+<div class="mt-8">
+
+<h3>Code changes (PRs) for this work</h3>
+
+<p class="text-sm opacity-75">MERGED = done · OPEN = under review · DRAFT = not ready · CLOSED = dropped. Numbers only; details in #10743 / #10744 (previous slide).</p>
+
+<div class="mt-2 space-y-1 text-base">
+<div><span class="text-green-600 font-bold">MERGED</span> #10698, #10696, #10700</div>
+<div><span class="text-yellow-600 font-bold">OPEN</span> #10699, #10708, #10710, #10718</div>
+<div><span class="text-blue-600 font-bold">DRAFT</span> #10691 (possible code for the #10744 proposal)</div>
+<div><span class="text-red-600 font-bold">CLOSED</span> #10716 (superseded by the #10307 rollback)</div>
+</div>
+
+</div>
+
+<!--
 - Keep the OADP 1.7 statement as a target, not a commitment
 -->
 
