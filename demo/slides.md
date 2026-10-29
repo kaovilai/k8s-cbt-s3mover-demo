@@ -391,7 +391,8 @@ layout: default
 <v-clicks>
 
 1. **CSI Driver** with CBT
-   - hostpath (demo), Ceph RBD (production; delta needs the base retained)
+   - Demo: hostpath. Production: Ceph RBD
+   - Ceph deltas need the base snapshot kept
    - SnapshotMetadata service
 
 2. **MinIO** S3 storage
@@ -411,33 +412,32 @@ layout: default
 </div>
 <div v-click>
 
-```mermaid {theme: 'neutral', scale: 0.45}
-graph LR
+```mermaid {theme: 'neutral', scale: 0.47}
+graph TB
     subgraph ns["cbt-demo namespace"]
-        BW[Block Writer]
-        PVC[PVC<br/>Block]
-        VS1[Snap-1]
-        VS2[Snap-2]
-        MinIO[MinIO<br/>S3]
+        SC["4. Snapshot Controller"]
+        BW["3. Block Writer"]
+        PVC["PVC<br/>Block"]
+        VS1["Snapshot 1<br/>(first)"]
+        VS2["Snapshot 2<br/>(later)"]
     end
 
-    subgraph infra[Infrastructure]
-        CSI[CSI+CBT]
-        SC[Snapshot<br/>Controller]
-    end
+    CSI["1. CSI Driver with CBT"]
+    MinIO["2. MinIO S3"]
 
-    BW -.->|Uses| PVC
-    PVC -->|Create| VS1
-    PVC -->|Create| VS2
-    VS1 -->|CBT| CSI
-    VS2 -->|CBT| CSI
-    CSI -->|Delta| MinIO
-    SC --> VS1
-    SC --> VS2
+    BW -->|writes to| PVC
+    PVC -->|snapshot taken| VS1
+    PVC -->|snapshot taken| VS2
+    SC -->|"manages the<br/>snapshots"| PVC
+    VS1 -->|snapshot data| CSI
+    VS2 -->|snapshot data| CSI
+    CSI -->|changed blocks| MinIO
 
     style CSI fill:#f9f,stroke:#333
     style MinIO fill:#9cf,stroke:#333
 ```
+
+<p class="text-xs mt-1 opacity-75">Pink = driver that tracks changed blocks · Blue = backup target</p>
 
 </div>
 </div>
