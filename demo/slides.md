@@ -412,7 +412,7 @@ layout: default
 </div>
 <div v-click>
 
-```mermaid {theme: 'neutral', scale: 0.47}
+```mermaid {theme: 'neutral', scale: 0.44}
 graph TB
     subgraph ns["cbt-demo namespace"]
         SC["4. Snapshot Controller"]
@@ -612,7 +612,7 @@ layout: default
 
 <v-click>
 
-```mermaid {scale:0.5}
+```mermaid {scale:0.46}
 graph TB
     FS[Filesystem PVC<br/>volumeMounts: /data]
     SNAP[VolumeSnapshot<br/>fs-snapshot-1]
@@ -636,9 +636,9 @@ graph TB
 
 <v-click>
 
-<div class="mt-2 p-2 bg-yellow-900 bg-opacity-20 rounded text-xs">
+<div class="mt-1 p-2 bg-yellow-900 bg-opacity-20 rounded text-xs">
 
-**Key**: The `snapshot.storage.kubernetes.io/allow-volume-mode-change` annotation on VolumeSnapshotContent is required to change volume modes. Without it, the external-provisioner rejects the PVC. In Velero, the CSI Snapshot Exposer adds this annotation automatically.
+**Key**: the `allow-volume-mode-change` annotation on VolumeSnapshotContent must be present to switch volume modes. Velero's CSI Snapshot Exposer adds it automatically.
 
 </div>
 
@@ -646,6 +646,8 @@ graph TB
 
 <!--
 - KEP-3314 Non-Goal: "The volume could be attached to a pod with either Block or Filesystem volume modes"
+- Full annotation path: snapshot.storage.kubernetes.io/allow-volume-mode-change
+- Without it the external-provisioner rejects the PVC outright
 - Velero's CSI Snapshot Exposer uses getVolumeModeByAccessMode() which returns Block for data mover
 - The annotation is a security feature: prevents accidental volume mode changes
 - This came from a real CI failure - discovered the annotation requirement through iteration
@@ -1233,27 +1235,19 @@ Summary of achievements:
 layout: default
 ---
 
-# Current Status
+# Current Status: What Works
 
 <div grid="~ cols-2 gap-8">
 <div>
 
 <v-click>
 
-## ✅ What Works End-to-End
+## ✅ CBT API (real data)
 
-**CBT API (Real Data)**
 - GetMetadataAllocated: 42 blocks returned
 - GetMetadataDelta: Delta between snapshots
 - Upstream verifier: Metadata matches device
 - 99.98% data transfer savings
-
-**In-Cluster Backup/Restore**
-- cbt-backup Job: CBT → read blocks → S3
-- cbt-restore Job: S3 → write blocks → device
-- TLS + SA token gRPC auth
-- Filesystem → Block volume mode conversion
-- Service discovery from SnapshotMetadataService CR
 
 </v-click>
 
@@ -1262,21 +1256,13 @@ layout: default
 
 <v-click>
 
-## Remaining Limitations
+## ✅ In-cluster backup and restore
 
-**CSI Driver Support**
-- hostpath driver: Full CBT support (demo)
-- Ceph RBD: CBT works; the delta needs the base snapshot retained
-- Velero 1.19.0: Ceph RBD incrementals fall back to full (Case 2 not supported)
-- AWS EBS: does not implement CBT
-
-**ARM64 Architecture**
-- grpc_health_probe: AMD64-only in upstream
-- Fix: `multiarch-grpc-health-probe` branch
-
-**Incremental Restore**
-- Snapshot chain resolution: Implemented
-- Multi-snapshot restore: Needs testing
+- cbt-backup Job: CBT → read blocks → S3
+- cbt-restore Job: S3 → write blocks → device
+- TLS + SA token gRPC auth
+- Filesystem → Block volume mode conversion
+- Service discovery from SnapshotMetadataService CR
 
 </v-click>
 
@@ -1287,18 +1273,54 @@ layout: default
 
 <div class="mt-4 p-3 bg-green-900 bg-opacity-30 rounded text-sm">
 
-💡 **This demo is fully functional**: Real CBT API calls, block-level backup to S3, and restore — all running as in-cluster Jobs following the Velero pattern. Velero's Ceph retention work is tracked in #10743 and #10744.
+💡 **This demo is fully functional**: Real CBT API calls, block-level backup to S3, and restore — all running as in-cluster Jobs following the Velero pattern.
 
 </div>
 
 </v-click>
 
 <!--
-Status update:
-- LEFT: Everything that works end-to-end with real CBT data
-- RIGHT: Driver and Velero limitations, stated as they are today
+Status update, part 1:
+- Everything that works end-to-end with real CBT data
 - Key message: Demo is fully functional, not just infrastructure validation
-- Ceph RBD CBT works when the base snapshot is retained; Velero 1.19.0 does not retain it
+-->
+
+---
+layout: default
+---
+
+# Current Status: Remaining Limitations
+
+<div grid="~ cols-2 gap-8">
+<div>
+
+## CSI driver support
+
+- hostpath driver: Full CBT support (demo)
+- Ceph RBD: CBT works; the delta needs the base snapshot retained
+- Velero 1.19.0: Ceph RBD incrementals fall back to full (Case 2 not supported)
+- AWS EBS: does not implement CBT
+
+</div>
+<div>
+
+## ARM64 architecture
+
+- grpc_health_probe: AMD64-only in upstream
+- Fix: `multiarch-grpc-health-probe` branch
+
+## Incremental restore
+
+- Snapshot chain resolution: Implemented
+- Multi-snapshot restore: Needs testing
+
+</div>
+</div>
+
+<!--
+Status update, part 2:
+- Driver and Velero limitations, stated as they are today
+- Velero's Ceph retention work is tracked in #10743 and #10744
 -->
 
 ---

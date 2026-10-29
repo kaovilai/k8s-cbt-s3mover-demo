@@ -49,11 +49,51 @@ jobs:
         with:
           path: demo/dist
 
+  overflow:
+    name: Check slide overflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Uses the Chrome that ships with the runner image instead of
+      # Playwright's own Chromium download.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Setup @antfu/ni
+        run: npm i -g @antfu/ni
+
+      - name: Install dependencies
+        run: nci
+
+      - name: Start Slidev
+        run: |
+          npx slidev --port 3030 > /tmp/slidev.log 2>&1 &
+
+      - name: Check every slide fits its canvas
+        run: |
+          set +e
+          node scripts/check-slide-overflow.mjs --url http://localhost:3030
+          status=$?
+          if [ "$status" -eq 3 ]; then
+            echo "::warning::Chrome unavailable on this runner; skipping the overflow gate."
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "---- slidev log ----"; tail -50 /tmp/slidev.log
+          fi
+          exit $status
+
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    needs: build
+    needs: [build, overflow]
     runs-on: ubuntu-latest
     name: Deploy
     steps:

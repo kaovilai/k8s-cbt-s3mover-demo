@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "slidev",
     "build": "slidev build",
-    "export": "slidev export"
+    "export": "slidev export",
+    "check:overflow": "node scripts/check-slide-overflow.mjs"
   },
   "dependencies": {
     "@slidev/cli": "^53.0.0",

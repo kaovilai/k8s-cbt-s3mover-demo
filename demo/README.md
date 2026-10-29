@@ -52,6 +52,39 @@ Export the presentation to PDF:
 npm run export
 ```
 
+### Checking for cut-off slides
+
+Slidev renders every slide on a fixed 980x552 canvas and then scales it to the
+viewport. That means a slide can look fine in the overview while its right or
+bottom edge is still being cut off for the audience. Diagrams are the usual
+culprit: a wide mermaid graph overflows its column and loses boxes off the edge.
+
+Run the overflow check before pushing:
+
+```bash
+npm run dev            # in one terminal
+npm run check:overflow # in another
+```
+
+It walks every slide, compares each element (including mermaid diagrams drawn
+inside a shadow root) against that slide's own canvas, and fails with the slide
+number, the offending element, and how far past the edge it sits. Point it at a
+different port with `npm run check:overflow -- --url http://localhost:3031`, or
+check a subset with `--pages 11,17-20`.
+
+The `Check slide overflow` job runs the same script on every push to `main` and
+blocks deployment when a slide no longer fits.
+
+Two causes worth knowing about, because both look like a color/contrast problem
+rather than a layout one:
+
+- Mermaid diagrams render into a shadow root, so page CSS cannot resize them.
+  Set the diagram's own `scale` and pick a direction (`graph TB` rather than
+  `graph LR`) that fits the column.
+- The default theme applies `opacity: 0.5` to a paragraph that follows an `h1`,
+  treating it as a subtitle. If that line must read at full strength, add
+  `!opacity-100`.
+
 ### GitHub Pages Deployment
 
 The presentation is automatically deployed to GitHub Pages whenever changes are pushed:
