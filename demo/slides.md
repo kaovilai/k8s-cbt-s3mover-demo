@@ -692,7 +692,9 @@ layout: default
 
 # Velero CBT Status (Oct 2026)
 
-**Velero 1.19.0 supports Case 1, not Case 2.**
+**Velero 1.19.0 supports Case 1, not Case 2.** Delta = only the blocks that changed.
+
+<p class="text-sm opacity-75">Case = does the storage driver need the old (base) snapshot to still exist?</p>
 
 <div class="grid grid-cols-2 gap-6 mt-4">
 <div>
@@ -701,8 +703,8 @@ layout: default
 
 ### Case 1: no base snapshot needed
 
-- The driver computes the delta without the base being present
-- Example: vSphere
+- The storage driver computes the delta without the base being present
+- vSphere (works)
 - Unchanged in 1.19.0
 
 </v-click>
@@ -712,11 +714,13 @@ layout: default
 
 <v-click>
 
+<div class="inline-block px-2 py-1 rounded bg-red-600 text-white text-xs font-bold mb-2">NOT SUPPORTED</div>
+
 ### Case 2: base snapshot required
 
 - `GetMetadataDelta` needs the base to still exist
-- Example: Ceph RBD
-- **Not supported in 1.19.0**
+- Ceph RBD (does NOT work in 1.19.0)
+- <span class="text-red-500 font-bold">Not supported in 1.19.0</span>
 
 </v-click>
 
@@ -727,7 +731,8 @@ layout: default
 
 <div class="mt-4 p-3 bg-yellow-900 bg-opacity-20 rounded text-sm">
 
-Retention reverted: Velero no longer reads the VolumeSnapshotClass `deletionPolicy`, so backup VolumeSnapshotContents always use `Delete` (1.18 behavior). The class-inheritance part of #10307 is being rolled back; the changeID fix (#10294) stays.
+<p><strong>1.19.0:</strong> backup snapshots are always deleted afterward (same as 1.18).</p>
+<p class="mt-1"><strong>#10307</strong> (copy the snapshot class's delete setting): being undone. <strong>#10294</strong> (fix for the change-tracking ID): stays.</p>
 
 </div>
 
@@ -746,26 +751,26 @@ layout: default
 
 # Ceph RBD on Velero 1.19.0
 
-<div class="grid grid-cols-2 gap-6">
+<div class="grid grid-cols-2 gap-6 text-sm">
 <div>
 
 <v-click>
 
-### What happens
+### What 1.19.0 does
 
-1. The backup retains no base snapshot
-2. The base is deleted with the `Delete` class
-3. `GetMetadataDelta` fails: `no snap source in omap`
-4. The block data mover falls back to a full backup (`fallbackFull`)
+<p class="mb-2">Base = the old snapshot we compare against. Velero deletes it, so the comparison fails, and Velero copies everything.</p>
+
+1. Velero keeps no base: the snapshot class is set to `Delete`
+2. `GetMetadataDelta` fails: `no snap source in omap` (Ceph's lookup table)
+3. Velero's data mover (the robot that copies disk blocks) falls back to a full copy (`fallbackFull`)
 
 </v-click>
 
 <v-click>
 
 <div class="mt-3 p-3 bg-green-900 bg-opacity-20 rounded text-sm">
-
-Backup data is still correct. The loss is incremental transfer, not integrity.
-
+<p><strong>Backups are still correct.</strong> They just copy everything each time instead of only changes (slower, bigger).</p>
+<p class="mt-1">The file system data mover never keeps snapshots.</p>
 </div>
 
 </v-click>
@@ -775,23 +780,23 @@ Backup data is still correct. The loss is incremental transfer, not integrity.
 
 <v-click>
 
-### What is proven (base retained)
+### What was tested early (base kept, NOT 1.19.0)
 
-- True incremental on OCP + Rook and ODF
-- c2 delta: exactly 150,994,944 bytes
-- Whole-device SHA-256 matched at every restore point
-- VM booted; multi-disk VM (including hotplug) checksums matched
-- In-place incremental restore (`existingVolumeDataPolicy: incremental`): 30 GiB, 270,532,608 bytes, 22 s
+<div class="mt-2 p-2 bg-blue-900 bg-opacity-20 rounded text-sm">
+Validated with the base snapshot kept, on pre-release builds. These are not 1.19.0 results as shipped.
+</div>
 
 </v-click>
 
 <v-click>
 
-<div class="mt-3 p-2 bg-blue-900 bg-opacity-20 rounded text-xs">
-
-Validated with a retained base snapshot on pre-release builds. These are not 1.19.0 results as shipped.
-
-</div>
+<ul class="mt-2">
+<li>Only changed blocks were sent on Ceph storage on OpenShift (Rook and ODF setups)</li>
+<li>Second backup sent only 150,994,944 bytes</li>
+<li>Whole-disk checksum (SHA-256) matched at every restore point</li>
+<li>VM booted; multi-disk VM (including hotplug, a disk added while running) matched checksums</li>
+<li>In-place restore (onto the existing disk): 30 GiB, 270,532,608 bytes sent, 22 s</li>
+</ul>
 
 </v-click>
 
@@ -818,8 +823,8 @@ layout: default
 
 ### Tracking
 
-- Umbrella: [#10743](https://github.com/velero-io/velero/issues/10743)
-- Design: [#10744](https://github.com/velero-io/velero/issues/10744)
+- Umbrella issue: [#10743](https://github.com/velero-io/velero/issues/10743) (tracks the work)
+- Design issue: [#10744](https://github.com/velero-io/velero/issues/10744) (the proposal)
 - Target: a 1.19.x patch
 
 </v-click>
@@ -828,12 +833,11 @@ layout: default
 
 ### Proposal (not settled)
 
-- Volume policy parameter (working name `retainBaseSnapshot`)
-- Then auto-detect from the `requireBaseSnapshotForDelta` field
-- Default: do not retain
-- Velero owns retention; class `deletionPolicy` is ignored
-- One retained snapshot per chain; delete it after the next backup
-- Deleting a backup deletes its retained snapshot
+**How it picks**
+
+1. Volume policy `retainBaseSnapshot` (working name) says keep -> keep the base snapshot
+2. Else auto-detect from `requireBaseSnapshotForDelta`
+3. Else default: do not keep
 
 </v-click>
 
@@ -845,8 +849,17 @@ layout: default
 ### Timeline
 
 - CBT on Ceph is delayed, not dropped
-- Still in the 1.19 stream (1.19.x)
-- **Targeted** for OADP 1.7, not committed
+- Aimed at a 1.19.x patch (OADP 1.7, Red Hat's Velero product), not committed
+
+</v-click>
+
+<v-click>
+
+### Snapshot rules
+
+- Velero alone decides; the class delete setting (`deletionPolicy`) plays no part
+- A chain (base + follow-ups) keeps the newest snapshot
+- After the next backup, Velero deletes the older one; deleting a backup deletes its kept snapshot
 
 </v-click>
 
@@ -854,10 +867,10 @@ layout: default
 
 ### In flight
 
-- #10698, #10696, #10700 merged
-- #10699, #10708, #10710, #10718 open
-- #10691 draft (candidate for #10744)
-- #10716 closed; superseded by rollback
+- <span class="text-green-600 font-bold">MERGED</span> #10698, #10696, #10700
+- <span class="text-yellow-600 font-bold">OPEN</span> #10699, #10708, #10710, #10718
+- <span class="text-blue-600 font-bold">DRAFT</span> #10691 (candidate for #10744)
+- <span class="text-red-600 font-bold">CLOSED</span> #10716 (superseded by the #10307 rollback)
 
 </v-click>
 
