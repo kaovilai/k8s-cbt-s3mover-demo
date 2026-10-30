@@ -75,6 +75,36 @@ check a subset with `--pages 11,17-20`.
 The `Check slide overflow` job runs the same script on every push to `main` and
 blocks deployment when a slide no longer fits.
 
+### Keeping the Velero status current
+
+The Velero/Ceph section is the part of this deck that goes stale fastest. A weekly
+scheduled check re-reads the upstream items below, compares them against what
+`slides.md` and the top-level `README.md` claim, and reports the file and line that
+needs editing. It reports only; it never commits or opens a PR.
+
+| Source | What it settles |
+|---|---|
+| [kubernetes/enhancements#6479](https://github.com/kubernetes/enhancements/pull/6479) | whether KEP-3314 documents `requireBaseSnapshotForDelta` |
+| [external-snapshot-metadata#258](https://github.com/kubernetes-csi/external-snapshot-metadata/pull/258) | whether that CRD field is in a release yet |
+| [ceph-csi#6680](https://github.com/ceph/ceph-csi/issues/6680) | whether RBD advertises the field |
+| [ceph-csi#6679](https://github.com/ceph/ceph-csi/issues/6679) | SELinux host mount, fixed by `enableSelinuxHostMount` |
+| [velero#10743](https://github.com/velero-io/velero/issues/10743), [velero#10744](https://github.com/velero-io/velero/issues/10744) | the Case 2 retention design |
+| [velero#10722](https://github.com/velero-io/velero/issues/10722) | Velero reading the driver flag |
+| [rook#18636](https://github.com/rook/rook/pull/18636), [ceph-csi-operator#649](https://github.com/ceph/ceph-csi-operator/pull/649) | the OpenShift install fixes |
+
+To run the same comparison by hand:
+
+```bash
+gh pr view 6479 --repo kubernetes/enhancements --json state,mergedAt
+gh pr view 258 --repo kubernetes-csi/external-snapshot-metadata --json state
+gh release list --repo kubernetes-csi/external-snapshot-metadata --limit 5
+gh issue view 10743 --repo velero-io/velero --json state
+gh release list --repo velero-io/velero --limit 5
+```
+
+Update the top-level `README.md` Velero section first, then mirror the wording into
+the deck so the long-form rationale and the slides do not drift apart.
+
 Two causes worth knowing about, because both look like a color/contrast problem
 rather than a layout one:
 
