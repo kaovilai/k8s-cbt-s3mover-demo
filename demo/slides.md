@@ -905,8 +905,8 @@ layout: default
 
 <div class="mt-2 space-y-1 text-base">
 <div><span class="text-green-600 font-bold">MERGED</span> #10698, #10696, #10700</div>
-<div><span class="text-yellow-600 font-bold">OPEN</span> #10699, #10708, #10710, #10718</div>
-<div><span class="text-blue-600 font-bold">DRAFT</span> #10691 (possible code for the #10744 proposal)</div>
+<div><span class="text-yellow-600 font-bold">OPEN</span> #10699, #10710, #10718</div>
+<div><span class="text-blue-600 font-bold">DRAFT</span> #10691 (possible code for the #10744 proposal), #10708 (source VSC cleanup)</div>
 <div><span class="text-red-600 font-bold">CLOSED</span> #10716 (superseded by the #10307 rollback)</div>
 </div>
 

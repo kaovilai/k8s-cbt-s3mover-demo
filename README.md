@@ -807,16 +807,16 @@ context: none of these items changes the 1.19.0 Case 1 / Case 2 status.
   read it. It is currently a 1.20 candidate, after the 1.19.x design.
 - Merged Velero PRs: #10698 (fix: zero block ranges on restore), #10696 (docs: swap the
   two case descriptions), #10700 (fix: retry after an interrupted backup deletion).
-- Open Velero PRs: #10699 (fix: in-place restore leaked a base snapshot), #10708 (fix:
-  clean up the source VSC when the snapshot step is interrupted), #10710 (fix: clean up a
-  failed backup's VolumeSnapshot), #10718 (docs).
-- Open Velero PR #10740 adds parallel upload/download control. It is not in 1.19.0, so
-  1.19.0 users are not affected.
-  - Only if you test this PR: on a 96 vCPU node with its defaults, the data mover pod
-    runs out of memory (OOM) and is killed. The default run's peak memory was not
-    recorded, and the pod's memory limit is not known. The data mover is a Go program; it
-    sizes its parallel work from the node's CPU count (96 here; `GOMAXPROCS=96`), so
-    memory use grows.
+- Open Velero PRs: #10699 (fix: in-place restore leaked a base snapshot), #10710 (fix:
+  clean up a failed backup's VolumeSnapshot), #10718 (docs).
+- Draft Velero PR #10708 (fix: clean up the source VSC when the snapshot step is
+  interrupted).
+- Velero PR #10740 (merged 2026-10-28) adds parallel upload/download control. It is not
+  in 1.19.0; whether it ships in a 1.19.x patch is unconfirmed.
+  - On a 96 vCPU node with its defaults, the data mover pod runs out of memory (OOM) and
+    is killed. The default run's peak memory was not recorded, and the pod's memory limit
+    is not known. The data mover is a Go program; it sizes its parallel work from the
+    node's CPU count (96 here; `GOMAXPROCS=96`), so memory use grows.
   - Workaround: the cluster admin sets `cpu` in the `podResources` ConfigMap of the
     node-agent (the Velero pod on each node that runs the data mover). Set `cpu` to a
     small number, e.g. 2. Pod memory used: CPU limit 2 -> 384 MiB, 8 -> 690 MiB, 16 ->
@@ -829,9 +829,11 @@ context: none of these items changes the 1.19.0 Case 1 / Case 2 status.
 `enableSeLinuxHostMount: true` on the node plugin. Without it, RBD Filesystem volumes
 mount without the expected SELinux label (`unlabeled_t`), and pods using the volume get a
 permission-denied error (EACCES)
-([ceph-csi#6679](https://github.com/ceph/ceph-csi/issues/6679)). Docs:
-[ceph-csi-operator#649](https://github.com/ceph/ceph-csi-operator/pull/649),
-[rook#18636](https://github.com/rook/rook/pull/18636).
+([ceph-csi#6679](https://github.com/ceph/ceph-csi/issues/6679), closed as completed).
+The docs for `enableSeLinuxHostMount` were merged in
+[ceph-csi-operator#649](https://github.com/ceph/ceph-csi-operator/pull/649).
+The corresponding [Rook docs change](https://github.com/rook/rook/pull/18636) is still
+open.
 
 **Sources.**
 
